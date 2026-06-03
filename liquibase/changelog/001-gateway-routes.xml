@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+  <changeSet id="seed-be-routes" author="snapdragon">
+    <insert tableName="gateway_routes">
+      <column name="route_id" value="be-default"/>
+      <column name="uri" value="http://snapdragon-api.snapdragon-backend.svc.cluster.local:8080"/>
+      <column name="predicates" value="Path=/**"/>
+    </insert>
+  </changeSet>
+</databaseChangeLog>

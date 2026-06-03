@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: snapdragon-be-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${CASDOOR_ISSUER_URI:https://id.snapdragon.systems}
+  cloud:
+    gateway:
+      routes:
+        - id: be-default
+          uri: ${DOWNSTREAM_URI:http://snapdragon-api.snapdragon-backend.svc.cluster.local:8080}
+          predicates:
+            - Path=/**
