@@ -1,0 +1,8 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -c "import glob,yaml; [yaml.safe_load(open(f)) for f in glob.glob(\"application-*.yml\")]; print(\"config ok\")"
