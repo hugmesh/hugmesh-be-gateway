@@ -48,7 +48,8 @@ own name, route set and route-access rows. This repo is the backend one.
 |------|---------|
 | `Dockerfile` | `FROM ${GATEWAY_IMAGE}` then bakes the be identity + config + Liquibase changelog onto the shared image |
 | `application-be.yml` | overlay config: `application.name`, the Casdoor `issuer-uri`, and the single `be-default` `Path=/**` route to the API (loaded via `SPRING_CONFIG_ADDITIONAL_LOCATION`) |
-| `liquibase/changelog/001-gateway-routes.xml` | seeds the `be-default` route (`Path=/**` → API) into the DB-backed route registry |
+| `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog** — the entry point the base gateway image runs; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`) |
+| `liquibase/changelog/001-gateway-routes.xml` | seeds the `be-default` route (`Path=/**` → API) into the DB-backed route **registry** (`gateway_routes`) |
 | `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `snapdragon-gateway` image in the same in-cluster GitLab registry namespace |
 
 CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this repo.
@@ -56,6 +57,16 @@ CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this rep
 ---
 
 ## Inherited capabilities (from `snapdragon-gateway`)
+
+> **Reference summary, not local behavior.** Everything in this section is owned by
+> and **authoritative in** [`snapdragon-gateway`](https://github.com/Snapdragon-Systems/snapdragon-gateway)
+> — not defined or verifiable in this repo. This overlay contributes only
+> `application-be.yml` + the `gateway_routes` seed (see [What's in this repo](#whats-in-this-repo)).
+> Treat the descriptions below as a convenience digest; if they drift from the base
+> gateway, the base repo wins. The base image is pinned by tag via the `GATEWAY_IMAGE`
+> build-arg (CI passes `…/snapdragon-gateway:$CI_COMMIT_REF_SLUG`; see `.gitlab-ci.yml`),
+> so the exact inherited code is traceable per build. Edit base-gateway behavior there,
+> not here.
 
 Because the image is the shared gateway, the be-gateway gets the full gateway
 authorization stack for free. The relevant pieces for the backend front door:
@@ -98,10 +109,11 @@ The shared WebFilters run (after Spring Security authenticates the JWT) in order
 | +100 | `RevocationGatewayFilter` | reject revoked Casdoor tokens (Cassandra-cached) |
 | +200 | `ExternalAuthHeaderFilter` | inject additive `External-Authorization` headers when an external-OAuth token is present (never required) |
 | +250 | `GatewayRouteAccessFilter` | **per-gateway external-access rules** + the cross-domain hard-deny / `SUPERADMIN` bypass |
-| +300 | `ResourceAccessFilter` | snapdragon.games per-resource grants (`game:{slug}`, `session:{id}`) |
+| +300 | `ResourceAccessFilter` | Snapdragon Game Studio per-resource grants (`game:{slug}`, `session:{id}`) — a base-image filter that is **inert on the backend route set** (it gates the games gateway sibling, not this `Path=/**` API front door) |
 
-`ROLE_ADMIN` / `ROLE_GAME-MASTER` on the internal JWT bypass the access filters
-**within their own domain**, so the admin who manages the rules is never locked out.
+`ROLE_ADMIN` (and, on the games gateway, `ROLE_GAME-MASTER`) on the internal JWT
+bypass the access filters **within their own domain**, so the admin who manages the
+rules is never locked out.
 A `HomeserverTokenRevocationFilter` covers the Matrix/Mastodon passthrough surface,
 where requests carry an opaque homeserver bearer instead of a Casdoor JWT.
 
@@ -116,6 +128,12 @@ unreachable it serves the last-known Cassandra rows; if neither is configured it
 back to the baked-in canonical seed — **never silently fail-open**. The admin-bff
 (`snapdragon-admin-bff-api`) CRUDs the canonical rows. Longest-matching `url_pattern`
 wins; explicit `allow=false` denies; the `PUBLIC` sentinel permits anonymous traffic.
+
+> **Which table this repo touches.** Don't confuse the two route tables. This repo's
+> Liquibase changelog seeds **only** the `gateway_routes` route **registry** (the one
+> `be-default` `Path=/**` → API row). The `gateway_route_access` **authorization** rows
+> for `spring.application.name=snapdragon-be-gateway` are seeded and CRUDed by
+> `snapdragon-admin-bff-api`, **not here**.
 
 ### Downstream mTLS (gateway → API)
 
@@ -157,4 +175,29 @@ Overlay-relevant env vars (the full set is documented in `snapdragon-gateway`):
 - **Multi-tenancy** — per-brand instances each carry their own issuer + `gateway`
   name + route-access rows; `DOMAIN_<x>` scoping + the cross-domain hard-deny enforce
   brand isolation at the gateway.
-```
+
+---
+
+## Roadmap
+
+> State convention: 🚧 **in-flight** = code on an open branch/PR, not yet merged ·
+> 🔭 **planned** = design-complete, no code. Nothing below is shipped on `main`.
+> These are **inherited / upstream** changes — none expected to alter the files in
+> this overlay repo, but each affects how this be-gateway behaves once the base
+> `snapdragon-gateway` image (pinned by `GATEWAY_IMAGE`) picks them up.
+
+- 🚧 **MFA-gated routes (Casdoor MFA).** A base-gateway capability: a
+  `gateway_route_access.mfa_required` column plus `amr`/`acr` → `MFA_SATISFIED`
+  **fail-closed** enforcement. Once shipped upstream, the be-gateway will inherit
+  `mfa_required` enforcement for its backend routes. No local change here — it only
+  affects the `gateway_route_access` rows (CRUDed by admin-bff) that target
+  `snapdragon-be-gateway`.
+- 🚧 **New backend API surfaces behind `Path=/**`.** Notifications **external
+  channels** (Matrix DM / Akkoma feed / phpBB / email adapters) and the **Workload
+  Console** (admin-bff changelog 110-band) add API endpoints that this catch-all route
+  fronts. No change to this repo; if a future README ever enumerates what the backend
+  API exposes, these must be marked roadmap, not shipped.
+- 🚧 **Upstream supply-chain hardening.** Base-image and binary checksum/GPG
+  verification is being added in the generator/base build, not here — relevant only
+  insofar as this overlay pins `GATEWAY_IMAGE` by tag, so a hardened base image flows
+  through transparently on the next build.
