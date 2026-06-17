@@ -109,10 +109,10 @@ The shared WebFilters run (after Spring Security authenticates the JWT) in order
 | +100 | `RevocationGatewayFilter` | reject revoked Casdoor tokens (Cassandra-cached) |
 | +200 | `ExternalAuthHeaderFilter` | inject additive `External-Authorization` headers when an external-OAuth token is present (never required) |
 | +250 | `GatewayRouteAccessFilter` | **per-gateway external-access rules** + the cross-domain hard-deny / `SUPERADMIN` bypass |
-| +300 | `ResourceAccessFilter` | Snapdragon Game Studio per-resource grants (`game:{slug}`, `session:{id}`) — a base-image filter that is **inert on the backend route set** (it gates the games gateway sibling, not this `Path=/**` API front door) |
+| +300 | `ResourceAccessFilter` | per-resource grants — a base-image filter that is **inert on the backend route set** (it gates other gateway siblings, not this `Path=/**` API front door) |
 
-`ROLE_ADMIN` (and, on the games gateway, `ROLE_GAME-MASTER`) on the internal JWT
-bypass the access filters **within their own domain**, so the admin who manages the
+`ROLE_ADMIN` on the internal JWT
+bypasses the access filters **within its own domain**, so the admin who manages the
 rules is never locked out.
 A `HomeserverTokenRevocationFilter` covers the Matrix/Mastodon passthrough surface,
 where requests carry an opaque homeserver bearer instead of a Casdoor JWT.
@@ -165,8 +165,9 @@ Overlay-relevant env vars (the full set is documented in `snapdragon-gateway`):
 ## Relationship to the platform
 
 - **Gateways** — one shared `snapdragon-gateway` image; this overlay is its backend
-  instance. The fe-gateway, identity gateways and games gateway are siblings off the
-  same image.
+  instance. The fe-gateway and identity gateways are siblings off the same image
+  (an optional games gateway is another sibling when the opt-in games service is
+  enabled).
 - **Casdoor** — the gateway is a resource server only; it validates JWTs minted by the
   brand's Casdoor and never exposes a login.
 - **Federation** — the same domain-scoping and route-access rows that gate ordinary
