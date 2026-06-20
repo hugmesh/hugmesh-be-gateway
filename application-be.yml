@@ -8,8 +8,14 @@ spring:
           issuer-uri: ${CASDOOR_ISSUER_URI:https://id.snapdragon.systems}
   cloud:
     gateway:
-      routes:
-        - id: be-default
-          uri: ${DOWNSTREAM_URI:http://snapdragon-api.snapdragon-backend.svc.cluster.local:8080}
-          predicates:
-            - Path=/**
+      # SCG 5.0 (Spring Boot 4) moved route config to
+      # spring.cloud.gateway.server.webflux.* — the legacy spring.cloud.gateway.routes
+      # prefix binds NOTHING under SCG 5.0 (silent empty list), so this fallback
+      # route must live under server.webflux to be honoured.
+      server:
+        webflux:
+          routes:
+            - id: be-default
+              uri: ${DOWNSTREAM_URI:http://snapdragon-api.snapdragon-backend.svc.cluster.local:8080}
+              predicates:
+                - Path=/**
