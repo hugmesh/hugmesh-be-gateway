@@ -26,6 +26,33 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/gateway:dev \
 
 ---
 
+## Current State
+
+- **Baseline:** rides the **Spring Boot 4.0.2 / Spring Cloud 2025.1** ecosystem
+  baseline through the inherited `snapdragon-gateway` image (shared
+  `snapdragon-parent` metapom + `snapdragon-commons` security/tenancy). This overlay
+  carries no Java of its own, so it inherits the baseline transparently on the next
+  build of the pinned `GATEWAY_IMAGE`.
+- **SCG 5.0 route namespace — fixed & shipped on `main`.** Spring Cloud Gateway 5.0
+  (Boot 4) moved route config from `spring.cloud.gateway.routes` to
+  `spring.cloud.gateway.server.webflux.routes`; the legacy prefix silently binds
+  **nothing**. `application-be.yml` now declares the `be-default` `Path=/**` route
+  under `spring.cloud.gateway.server.webflux.routes`, so the catch-all to the backend
+  API is honoured again. (Route-registry seeding via Liquibase into `gateway_routes`
+  is unaffected — that path was never namespace-sensitive.)
+- **Auth posture — pure Casdoor-JWT resource server.** The be-gateway validates the
+  **internal Casdoor JWT** and runs the inherited authority/domain/route-access stack;
+  it **exposes no login**. In the current SSO model, browsers hold only an opaque
+  `bff_`-prefixed session and the per-session JWT custody/refresh + the `bff_`→custody-JWT
+  swap live **upstream of this overlay** (login-ui + user-bff + the shared gateway
+  pre-security filter), so nothing in this repo changes for that model.
+- **Authorization data source.** Route-access rows remain admin-managed in Postgres
+  (`gateway_route_access`, source of truth), CRUDed by `snapdragon-admin-bff-api`;
+  this repo only seeds the `be-default` row into the `gateway_routes` **registry**.
+- **CI:** GitLab (in-cluster). No GitHub Actions in this repo.
+
+---
+
 ## Where it sits
 
 | | |
@@ -47,7 +74,7 @@ own name, route set and route-access rows. This repo is the backend one.
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | `FROM ${GATEWAY_IMAGE}` then bakes the be identity + config + Liquibase changelog onto the shared image |
-| `application-be.yml` | overlay config: `application.name`, the Casdoor `issuer-uri`, and the single `be-default` `Path=/**` route to the API (loaded via `SPRING_CONFIG_ADDITIONAL_LOCATION`) |
+| `application-be.yml` | overlay config: `application.name`, the Casdoor `issuer-uri`, and the single `be-default` `Path=/**` route to the API, declared under `spring.cloud.gateway.server.webflux.routes` (SCG 5.0 / Boot 4 namespace; loaded via `SPRING_CONFIG_ADDITIONAL_LOCATION`) |
 | `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog** — the entry point the base gateway image runs; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`) |
 | `liquibase/changelog/001-gateway-routes.xml` | seeds the `be-default` route (`Path=/**` → API) into the DB-backed route **registry** (`gateway_routes`) |
 | `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `snapdragon-gateway` image in the same in-cluster GitLab registry namespace |
@@ -87,6 +114,12 @@ maps the token to Spring authorities:
 
 The least-privilege cascade is `SUPERADMIN > ADMIN/MOD > USER` (with `MOD` and
 `ADMIN` as siblings), plus the separate `ROLE_IMAGE_BUILDER` capability.
+
+The browser-facing SSO model (login-ui Casdoor OIDC/PKCE redirect, user-bff
+server-side code→token exchange + per-session JWT custody/refresh, and the opaque
+`bff_`→internal-JWT swap performed by a shared pre-security gateway filter) is owned
+upstream; from this overlay's perspective the request that reaches it already carries
+a validated internal Casdoor JWT.
 
 ### Domain scoping (multi-tenancy)
 
@@ -169,7 +202,8 @@ Overlay-relevant env vars (the full set is documented in `snapdragon-gateway`):
   (an optional games gateway is another sibling when the opt-in games service is
   enabled).
 - **Casdoor** — the gateway is a resource server only; it validates JWTs minted by the
-  brand's Casdoor and never exposes a login.
+  brand's Casdoor and never exposes a login. Browser-facing SSO (OIDC/PKCE) is handled
+  by login-ui + user-bff, which hand this gateway a validated internal JWT.
 - **Federation** — the same domain-scoping and route-access rows that gate ordinary
   traffic also gate federated/remote surfaces; `SUPERADMIN` is the only cross-domain
   reach.
@@ -187,6 +221,11 @@ Overlay-relevant env vars (the full set is documented in `snapdragon-gateway`):
 > this overlay repo, but each affects how this be-gateway behaves once the base
 > `snapdragon-gateway` image (pinned by `GATEWAY_IMAGE`) picks them up.
 
+- 🚧 **SSO end-to-end + e2e.** The Casdoor OIDC/PKCE login model (login-ui → user-bff
+  custody JWT → opaque `bff_` browser session, swapped to the internal JWT by the
+  shared pre-security gateway filter) is being driven to a live, e2e-tested state
+  upstream. This be-gateway inherits the `bff_`→JWT swap from the base image; no local
+  change here.
 - 🚧 **MFA-gated routes (Casdoor MFA).** A base-gateway capability: a
   `gateway_route_access.mfa_required` column plus `amr`/`acr` → `MFA_SATISFIED`
   **fail-closed** enforcement. Once shipped upstream, the be-gateway will inherit
@@ -198,6 +237,12 @@ Overlay-relevant env vars (the full set is documented in `snapdragon-gateway`):
   Console** (admin-bff changelog 110-band) add API endpoints that this catch-all route
   fronts. No change to this repo; if a future README ever enumerates what the backend
   API exposes, these must be marked roadmap, not shipped.
+- 🔭 **Auth-core relocation (upstream).** Login/session/account logic is being
+  relocated from admin-bff to user-bff, with shared account/session/MFA/Casdoor-admin
+  infra extracted to `snapdragon-auth-core` (consumed by user-bff + admin-bff only).
+  This is invisible to the be-gateway — it still validates the internal Casdoor JWT —
+  but it is why admin-bff remains the CRUD owner of `gateway_route_access` while
+  account/session **data** stays in admin-bff-db.
 - 🚧 **Upstream supply-chain hardening.** Base-image and binary checksum/GPG
   verification is being added in the generator/base build, not here — relevant only
   insofar as this overlay pins `GATEWAY_IMAGE` by tag, so a hardened base image flows
