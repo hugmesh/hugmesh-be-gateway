@@ -1,0 +1,76 @@
+# RENDERED from snapdragon-generator specs/cluster/charts/snapdragon-gateway
+# (templates/configmap.yaml) with the be-gateway routes from apps/20-gateway-be.yaml.
+# The gateway loads this application-routes.yml via SPRING_CONFIG_ADDITIONAL_LOCATION
+# (file:/config/). The Deployment mounts THIS ConfigMap (by fixed name) at /config.
+# Kept verbatim — Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snapdragon-be-gateway-routes
+  labels:
+    app.kubernetes.io/name: snapdragon-be-gateway
+    app.kubernetes.io/instance: snapdragon-be-gateway
+    app.kubernetes.io/part-of: snapdragon.systems
+    app.kubernetes.io/component: gateway
+    helm.sh/chart: snapdragon-gateway-0.1.0
+data:
+  # Loaded via SPRING_CONFIG_ADDITIONAL_LOCATION; merges over the image's
+  # baked-in application.yml. Defines this gateway's downstream routes.
+  application-routes.yml: |
+    spring:
+      cloud:
+        gateway:
+          # SCG 5.0 (Spring Boot 4) moved route config to
+          # spring.cloud.gateway.server.webflux.*; the legacy spring.cloud.gateway.routes
+          # prefix binds nothing under SCG 5.0, so these downstream routes must live
+          # under server.webflux to be honoured.
+          server:
+            webflux:
+              routes:
+                - id: headscale-forward
+                  uri: http://snapdragon-pki-gateway.snapdragon-pki.svc.cluster.local:8080
+                  predicates:
+                    - Host=scale.snapdragon.systems
+                - id: mastodon-oauth
+                  uri: https://akkoma-proxy.snapdragon-backend.svc.cluster.local:4443
+                  predicates:
+                    - Host=mastodon.snapdragon.systems
+                    - Path=/oauth/**
+                - id: mastodon-api
+                  uri: https://akkoma-proxy.snapdragon-backend.svc.cluster.local:4443
+                  predicates:
+                    - Host=mastodon.snapdragon.systems
+                    - Path=/api/v1/**
+                - id: mastodon-web
+                  uri: https://akkoma-proxy.snapdragon-backend.svc.cluster.local:4443
+                  predicates:
+                    - Host=mastodon.snapdragon.systems
+                - id: matrix-api
+                  uri: https://tuwunel-proxy.snapdragon-backend.svc.cluster.local:4443
+                  predicates:
+                    - Host=matrix.snapdragon.systems
+                    - Path=/_matrix/**
+                - id: matrix-wellknown
+                  uri: https://tuwunel-proxy.snapdragon-backend.svc.cluster.local:4443
+                  predicates:
+                    - Path=/_matrix/**
+                - id: matrix
+                  uri: https://tuwunel-proxy.snapdragon-backend.svc.cluster.local:4443
+                  predicates:
+                    - Host=matrix.snapdragon.systems
+                - id: games
+                  uri: http://snapdragon-games.snapdragon-games.svc.cluster.local:8080
+                  predicates:
+                    - Host=games.snapdragon.systems
+                - id: games-servers-console
+                  uri: http://games-instances-console.snapdragon-games-instances.svc.cluster.local:8080
+                  predicates:
+                    - Path=/games/servers/**
+                - id: federation-api
+                  uri: https://snapdragon-federation-api.snapdragon-backend.svc.cluster.local:8080
+                  predicates:
+                    - Path=/api/federation/**
+                - id: snapdragon-api
+                  uri: https://snapdragon-api.snapdragon-backend.svc.cluster.local:8080
+                  predicates:
+                    - Path=/api/**

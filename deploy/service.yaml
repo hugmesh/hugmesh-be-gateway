@@ -1,0 +1,22 @@
+# RENDERED from snapdragon-generator specs/cluster/charts/snapdragon-gateway
+# (templates/service.yaml) for releaseName=snapdragon-be-gateway. ClusterIP :8080.
+# Kept verbatim — Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: snapdragon-be-gateway
+  labels:
+    app.kubernetes.io/name: snapdragon-be-gateway
+    app.kubernetes.io/instance: snapdragon-be-gateway
+    app.kubernetes.io/part-of: snapdragon.systems
+    app.kubernetes.io/component: gateway
+    helm.sh/chart: snapdragon-gateway-0.1.0
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: snapdragon-be-gateway
+    app.kubernetes.io/instance: snapdragon-be-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

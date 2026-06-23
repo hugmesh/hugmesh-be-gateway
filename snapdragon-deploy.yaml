@@ -1,0 +1,29 @@
+# snapdragon-deploy.yaml — per-repo deploy descriptor (Phase 6 catalog).
+#
+# Discovered by the catalog ApplicationSet (snapdragon-generator
+# specs/cluster/apps/13-service-catalog.yaml): its scmProvider gitea generator
+# scans the in-cluster Forgejo org for repos carrying THIS file + a `deploy/`
+# kustomize dir and generates one ArgoCD Application (source path: deploy/).
+#
+# DUAL-HOME / SHIPS DARK: the gateway's authoritative source today is the Helm
+# CHART at snapdragon-generator specs/cluster/charts/snapdragon-gateway, deployed
+# per-instance by apps/20-gateway-be.yaml (releaseName snapdragon-be-gateway). This
+# file + deploy/ are a Forgejo-cutover step: the live GitHub-rooted ArgoCD ignores
+# them, and the (currently unseeded) Forgejo catalog matches nothing, so they change
+# nothing running. deploy/ is the chart RENDERED to static manifests (helm template
+# with the be-gateway values) — keep it in sync with the chart + values until cutover.
+name: snapdragon-be-gateway             # Application name (the BE gateway instance)
+namespace: snapdragon-backend           # target k8s namespace (existing tier ns)
+# Image repo. NB the live render uses the chart default snapdragon-systems/gateway:dev
+# (single image shared by pki/be/fe-gateway, differentiated by SPRING_APPLICATION_NAME),
+# NOT a per-instance repo or the GitLab-registry rewrite the kustomize services use.
+# deploy/ reproduces that verbatim; see deploy/kustomization.yaml for the cutover note.
+image: snapdragon-systems/gateway       # tag pinned in deploy/deployment.yaml (:dev)
+port: 8080
+replicas: 1
+# No `route:` block. snapdragon-be-gateway IS the routing enforcement point — it does
+# not get a route DB row pointing at itself. Its OWN downstream routes live in
+# deploy/configmap.yaml (snapdragon-be-gateway-routes, loaded via
+# SPRING_CONFIG_ADDITIONAL_LOCATION); its external front door is the nginx Ingress in
+# deploy/ingress.yaml (api./scale./games.snapdragon.systems) plus the Cloudflare
+# Tunnel (manifests/cloudflared, the primary edge).

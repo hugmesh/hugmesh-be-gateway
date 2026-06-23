@@ -1,0 +1,181 @@
+# RENDERED from snapdragon-generator specs/cluster/charts/snapdragon-gateway
+# (templates/deployment.yaml) with the be-gateway values from apps/20-gateway-be.yaml
+# (keystore.enabled=true, mTLS init, nodeSelector backend, seLinux s0:c12,
+# SNAPDRAGON_GATEWAY_MTLS_ENABLED=true, route-access-be-gateway DB identity).
+# Kept verbatim so deploy/ reproduces TODAY's Helm-rendered Deployment 1:1 — this is
+# the Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+#
+# checksum/routes is the helm sha256sum of the rendered configmap.yaml; preserved so
+# the pod template is byte-identical to the live render. Keep it in sync with
+# configmap.yaml if the routes ever change (or drop the annotation — it is only a
+# rollout trigger, not load-bearing for routing).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snapdragon-be-gateway
+  labels:
+    app.kubernetes.io/name: snapdragon-be-gateway
+    app.kubernetes.io/instance: snapdragon-be-gateway
+    app.kubernetes.io/part-of: snapdragon.systems
+    app.kubernetes.io/component: gateway
+    helm.sh/chart: snapdragon-gateway-0.1.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snapdragon-be-gateway
+      app.kubernetes.io/instance: snapdragon-be-gateway
+  template:
+    metadata:
+      annotations:
+        checksum/routes: 442e41ca91003548e98ff1d18447e2036cea39aea4975ff4882a3b1567069a82
+      labels:
+        app.kubernetes.io/name: snapdragon-be-gateway
+        app.kubernetes.io/instance: snapdragon-be-gateway
+    spec:
+      serviceAccountName: snapdragon-be-gateway
+      # The gateway is a Spring Cloud Gateway resource server: it validates the
+      # Casdoor JWT + routes to upstreams and NEVER calls the Kubernetes API, so
+      # its ServiceAccount token must not be mounted. NIST 800-53 AC-6 (least
+      # privilege), 800-190 §4.5.5; closes the SA-token theft -> API-access path.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+        seLinuxOptions:
+          type: container_t
+          level: "s0:c12"
+      nodeSelector:
+        snapdragon.systems/backend: "true"
+      initContainers:
+        # Build the PKCS12 keystore (mTLS identity) + JRE truststore from the
+        # Vault-PKI-issued, ESO-synced PEM Secret
+        # (snapdragon-be-gateway-mtls: tls.crt/tls.key/ca.crt).
+        # keytool + openssl ship in the JRE image, so reuse the gateway image.
+        # The store password is generated HERE, kept only in the tmpfs /stores
+        # emptyDir (never in git / a Secret / Vault), and emitted into a Spring
+        # properties file the app loads via SPRING_CONFIG_ADDITIONAL_LOCATION.
+        - name: build-keystore
+          image: "snapdragon-systems/gateway:dev"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              P="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
+              # mTLS identity: key + cert -> PKCS12 (Spring reads PKCS12 natively)
+              openssl pkcs12 -export -inkey /pki/tls.key -in /pki/tls.crt \
+                -certfile /pki/ca.crt -name snapdragon-be-gateway \
+                -out /stores/keystore.p12 -passout "pass:${P}"
+              # NARROW trust tier (default): only the issuing domain CA — per-brand
+              # isolation at the mTLS trust anchor.
+              keytool -importcert -noprompt -alias "snapdragon-cluster-ca" \
+                -file /pki/ca.crt -keystore /stores/truststore.p12 \
+                -storetype PKCS12 -storepass "${P}"
+              # Spring SSL config — picked up from file:/stores/ (added to
+              # SPRING_CONFIG_ADDITIONAL_LOCATION). server.ssl is opt-in via
+              # keystore.serverTls so probes/Service stay plaintext by default.
+              umask 077
+              cat > /stores/application-tls.properties <<EOF
+              snapdragon.tls.key-store=/stores/keystore.p12
+              snapdragon.tls.key-store-type=PKCS12
+              snapdragon.tls.key-store-password=${P}
+              snapdragon.tls.trust-store=/stores/truststore.p12
+              snapdragon.tls.trust-store-type=PKCS12
+              snapdragon.tls.trust-store-password=${P}
+              server.ssl.enabled=false
+              server.ssl.key-store=/stores/keystore.p12
+              server.ssl.key-store-type=PKCS12
+              server.ssl.key-store-password=${P}
+              # TLS protocol floor — TLSv1.3 by default (forward-secret, AEAD-only,
+              # prerequisite for PQC hybrid key exchange). See docs/CRYPTO-AUDIT.md.
+              server.ssl.enabled-protocols=TLSv1.3
+              EOF
+              echo "keystore + truststore + application-tls.properties built"
+          volumeMounts:
+            - { name: pki, mountPath: /pki, readOnly: true }
+            - { name: stores, mountPath: /stores }
+      containers:
+        - name: gateway
+          image: "snapdragon-systems/gateway:dev"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_APPLICATION_NAME
+              value: "snapdragon-be-gateway"
+            - name: PORT
+              value: "8080"
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "file:/config/,file:/stores/"
+            - name: CASDOOR_ISSUER_URI
+              value: "https://id.snapdragon.systems"
+            - name: CASDOOR_JWKS_URI
+              value: "http://casdoor.snapdragon-pki.svc.cluster.local:8000/.well-known/jwks"
+            - name: CASSANDRA_CONTACT_POINTS
+              value: "cassandra.snapdragon-pki.svc.cluster.local:9042"
+            - name: CASSANDRA_KEYSPACE
+              value: "snapdragon_gateway"
+            - name: CASSANDRA_LOCAL_DC
+              value: "dc1"
+            - name: ROUTE_ACCESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: route-access-be-gateway
+            - name: ROUTE_ACCESS_R2DBC_URL
+              value: r2dbc:postgresql://be_gateway:$(ROUTE_ACCESS_DB_PASSWORD)@route-access-db.snapdragon-pki.svc.cluster.local:5432/gateway
+            - name: SNAPDRAGON_GATEWAY_MTLS_ENABLED
+              value: "true"
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            initialDelaySeconds: 45
+            periodSeconds: 15
+          resources:
+            limits:
+              cpu: "1"
+              memory: 768Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          volumeMounts:
+            - name: routes
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: stores
+              mountPath: /stores
+              readOnly: true
+      volumes:
+        - name: routes
+          configMap:
+            name: snapdragon-be-gateway-routes
+        - name: tmp
+          emptyDir: {}
+        # Vault-PKI-issued mTLS material, synced by ESO (kubernetes.io/tls).
+        - name: pki
+          secret:
+            secretName: snapdragon-be-gateway-mtls
+        # tmpfs for the assembled PKCS12 stores + the pod-local SSL properties.
+        - name: stores
+          emptyDir:
+            medium: Memory
