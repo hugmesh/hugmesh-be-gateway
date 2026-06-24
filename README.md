@@ -49,6 +49,12 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/gateway:dev \
 - **Authorization data source.** Route-access rows remain admin-managed in Postgres
   (`gateway_route_access`, source of truth), CRUDed by `snapdragon-admin-bff-api`;
   this repo only seeds the `be-default` row into the `gateway_routes` **registry**.
+- **Forgejo service-catalog deploy descriptor — shipped dark on `main`.** A
+  `snapdragon-deploy.yaml` descriptor + a `deploy/` kustomize dir (the gateway Helm
+  chart rendered byte-for-byte to static manifests) are on `main` for the Phase-6
+  Forgejo catalog ApplicationSet. They **change nothing running**: the live ArgoCD
+  source is still the `snapdragon-gateway` Helm chart in `snapdragon-generator`, and
+  the GitHub-rooted control plane ignores these files until the Forgejo cutover.
 - **CI:** GitLab (in-cluster). No GitHub Actions in this repo.
 
 ---
@@ -78,6 +84,8 @@ own name, route set and route-access rows. This repo is the backend one.
 | `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog** — the entry point the base gateway image runs; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`) |
 | `liquibase/changelog/001-gateway-routes.xml` | seeds the `be-default` route (`Path=/**` → API) into the DB-backed route **registry** (`gateway_routes`) |
 | `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `snapdragon-gateway` image in the same in-cluster GitLab registry namespace |
+| `snapdragon-deploy.yaml` | per-repo deploy descriptor for the Phase-6 Forgejo **service-catalog** ApplicationSet (name/namespace/image/port). **Ships dark:** the live ArgoCD source today is the `snapdragon-gateway` Helm chart in `snapdragon-generator`, so this descriptor + `deploy/` change nothing running until the Forgejo cutover |
+| `deploy/` | the gateway Helm chart **rendered to static kustomize manifests** (`serviceaccount`/`configmap`/`service`/`deployment`/`ingress` + `kustomization.yaml`) — a verbatim, byte-identical dark copy of today's live render, kept for the Forgejo-source cutover; not consulted by the current GitHub-rooted ArgoCD |
 
 CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this repo.
 
