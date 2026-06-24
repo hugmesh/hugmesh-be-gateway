@@ -28,8 +28,8 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/gateway:dev \
 
 ## Current State
 
-- **Baseline:** rides the **Spring Boot 4.0.2 / Spring Cloud 2025.1** ecosystem
-  baseline through the inherited `snapdragon-gateway` image (shared
+- **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.0** ecosystem
+  baseline (on Java 25) through the inherited `snapdragon-gateway` image (shared
   `snapdragon-parent` metapom + `snapdragon-commons` security/tenancy). This overlay
   carries no Java of its own, so it inherits the baseline transparently on the next
   build of the pinned `GATEWAY_IMAGE`.
