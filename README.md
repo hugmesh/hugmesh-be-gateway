@@ -28,9 +28,10 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/gateway:dev \
 
 ## Current State
 
+- **Last synced:** 2026-06-25
 - **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.2** ecosystem
   baseline (on Java 25) through the inherited `snapdragon-gateway` image (shared
-  `snapdragon-parent` metapom + `snapdragon-commons` security/tenancy). This overlay
+  `snapdragon-parent` 2.7.0 metapom + `snapdragon-commons` 2.7.0 security/tenancy). This overlay
   carries no Java of its own, so it inherits the baseline transparently on the next
   build of the pinned `GATEWAY_IMAGE`.
 - **SCG 5.0 route namespace — fixed & shipped on `main`.** Spring Cloud Gateway 5.0
