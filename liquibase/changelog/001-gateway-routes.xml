@@ -2,6 +2,9 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+  <!-- NOTE: this route mirrors the static route defined in application-be.yml
+       (spring.cloud.gateway.server.webflux.routes[id=be-default], per SCG 5.0).
+       Keep both definitions in sync if the URI/predicate ever changes. -->
   <changeSet id="seed-be-routes" author="snapdragon">
     <insert tableName="gateway_routes">
       <column name="route_id" value="be-default"/>
