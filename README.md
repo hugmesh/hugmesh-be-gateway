@@ -146,11 +146,12 @@ The least-privilege cascade is `SUPERADMIN > ADMIN / MOD > USER` (where `MOD` an
 `ADMIN` are siblings, neither subordinate to the other), plus the orthogonal
 `ROLE_IMAGE_BUILDER` capability.
 
-The browser-facing SSO model (login-ui Casdoor OIDC/PKCE redirect, user-bff
-server-side code→token exchange + per-session JWT custody/refresh, and the opaque
-`bff_`→internal-JWT swap performed by a shared pre-security gateway filter) is owned
-upstream; from this overlay's perspective the request that reaches it already carries
-a validated internal Casdoor JWT.
+The browser-facing native-login model (a login form served directly by each
+service's own login-ui, POSTing to that service's own BFF login endpoint; Casdoor
+is internal-only and never redirects the browser, plus the resulting per-session
+JWT custody/refresh and the opaque `bff_`→internal-JWT swap performed by a shared
+pre-security gateway filter) is owned upstream; from this overlay's perspective the
+request that reaches it already carries a validated internal Casdoor JWT.
 
 ### Domain scoping (multi-tenancy)
 
@@ -286,8 +287,10 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   service is enabled.
 - **Casdoor** — this gateway is a resource server only. It validates JWTs minted
   by the brand's Casdoor instance and never exposes a login endpoint itself.
-  Browser-facing SSO (OIDC/PKCE) is handled by login-ui + user-bff, which hand
-  this gateway a validated internal JWT.
+  Browser-facing login (a native form in each service's own login-ui, POSTing to
+  that service's own BFF login endpoint — Casdoor is internal-only and never
+  redirects the browser) is handled by login-ui + user-bff, which hand this
+  gateway a validated internal JWT.
 - **Federation** — the same domain-scoping and route-access rules that gate
   ordinary traffic also gate federated and remote surfaces. `SUPERADMIN` is the
   only role with cross-domain reach.
@@ -307,11 +310,13 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 > how this be-gateway behaves once the base `snapdragon-gateway` image (pinned by
 > `GATEWAY_IMAGE`) picks them up.
 
-- 🚧 **SSO end-to-end + e2e.** The Casdoor OIDC/PKCE login model (login-ui → user-bff
-  custody JWT → opaque `bff_` browser session, swapped to the internal JWT by the
-  shared pre-security gateway filter) is being driven to a live, e2e-tested state
-  upstream. This be-gateway inherits the `bff_`→JWT swap from the base image; no local
-  change here.
+- 🚧 **SSO end-to-end + e2e.** The native-login model (each service's own login-ui
+  posts a login form directly to that service's own BFF; Casdoor is internal-only
+  and never redirects the browser) superseded the older Casdoor OIDC/PKCE
+  browser-redirect design and is being driven to a live, e2e-tested state upstream.
+  user-bff still custody-JWTs the result into an opaque `bff_` browser session,
+  swapped to the internal JWT by the shared pre-security gateway filter. This
+  be-gateway inherits the `bff_`→JWT swap from the base image; no local change here.
 - 🚧 **MFA-gated routes (Casdoor MFA).** A base-gateway capability: a new
   `gateway_route_access.mfa_required` column, plus `amr`/`acr` → `MFA_SATISFIED`
   authority mapping with **fail-closed** enforcement. Once shipped upstream, the
