@@ -3,6 +3,11 @@
 # The gateway loads this application-routes.yml via SPRING_CONFIG_ADDITIONAL_LOCATION
 # (file:/config/). The Deployment mounts THIS ConfigMap (by fixed name) at /config.
 # Kept verbatim — Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+#
+# TODO: this route table (no bare Path=/** entry) diverges from this repo's own
+# application-be.yml (a single Path=/** catch-all). Verified byte-identical to
+# the live render on 2026-06-23 only -- re-sync against the source Helm chart
+# before the Forgejo cutover relies on it. See README's Known Gaps section.
 apiVersion: v1
 kind: ConfigMap
 metadata:

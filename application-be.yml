@@ -16,6 +16,12 @@ spring:
       # NOTE: this route is also seeded into the gateway_routes table via
       # liquibase/changelog/001-gateway-routes.xml (DB-backed RouteDefinitionRepository).
       # Keep both definitions in sync if the URI/predicate ever changes.
+      #
+      # TODO: this single Path=/** catch-all is only THIS repo's overlay
+      # contribution. The route table actually mounted on the live pod
+      # (deploy/configmap.yaml, snapshotted 2026-06-23) is sourced from the
+      # Helm chart in snapdragon-generator and has no bare catch-all at all.
+      # Reconcile which is authoritative -- see README's Known Gaps section.
       server:
         webflux:
           routes:

@@ -40,9 +40,9 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/snapdragon-gateway:dev
 
 ---
 
-## Current State
+## Status
 
-- **Last synced:** 2026-06-25
+- **Last synced:** 2026-07-16
 - **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.2** ecosystem
   baseline (on Java 25) through the inherited `snapdragon-gateway` image (shared
   `snapdragon-parent` 2.7.0 metapom + `snapdragon-commons` 2.7.0 security/tenancy). This overlay
@@ -70,7 +70,43 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/snapdragon-gateway:dev
   Forgejo catalog ApplicationSet. They **change nothing running**: the live ArgoCD
   source is still the `snapdragon-gateway` Helm chart in `snapdragon-generator`, and
   the GitHub-rooted control plane ignores these files until the Forgejo cutover.
+- **Two different route tables exist — do not conflate them.** This repo's own
+  overlay contribution (`application-be.yml` + the Liquibase `gateway_routes` seed)
+  is genuinely just a single `Path=/**` catch-all to the API — that's the entirety
+  of what this repo emits. But `deploy/configmap.yaml` (captured by PR #9 as a
+  byte-identical snapshot of the **live** Helm-rendered route ConfigMap actually
+  mounted onto the be-gateway pod) shows the route table the cluster runs today is
+  sourced from `snapdragon-generator`'s `apps/20-gateway-be.yaml` Helm values, not
+  from this repo, and is materially richer: 11 explicit routes (games, matrix,
+  mastodon, headscale-forward, federation-api, snapdragon-api) with **no bare
+  `Path=/**` entry at all**. `deploy/deployment.yaml` also shows the live pod
+  running the **base** `snapdragon-systems/gateway:dev` image directly, not an
+  image built from this repo's `Dockerfile` — so it's unclear from this repo alone
+  whether the overlay image `.gitlab-ci.yml` builds and pushes is consumed by
+  anything today. That snapshot was verified byte-identical on **2026-06-23**
+  (PR #9) and hasn't been re-synced since — treat it as directional, not current
+  truth, until it's re-checked against the live chart. See **Known Gaps** below.
 - **CI:** GitLab (in-cluster). No GitHub Actions in this repo.
+
+```mermaid
+flowchart TB
+    subgraph repo["This repo — overlay-image build path"]
+        appyml["application-be.yml\n(single Path=/** route)"]
+        liq["liquibase seed\n(gateway_routes: be-default)"]
+        ci["Dockerfile + .gitlab-ci.yml\nbuild + push the overlay image"]
+    end
+
+    subgraph live["Live cluster today — Helm chart path"]
+        chart["snapdragon-gateway Helm chart\n(snapdragon-generator repo)"]
+        cm["rendered route ConfigMap\n(games / matrix / mastodon /\nheadscale-forward / federation-api /\nsnapdragon-api -- no bare catch-all)"]
+        pod["running be-gateway pod\n(base image + this ConfigMap)"]
+        chart --> cm --> pod
+    end
+
+    snapshot["deploy/ in this repo:\na dark, point-in-time snapshot\nof the live path (verified 2026-06-23,\nnow stale) -- not the source of truth"]
+
+    pod --> snapshot
+```
 
 ---
 
@@ -196,8 +232,11 @@ flowchart TB
 ### Authorization filter chain
 
 After Spring Security validates the JWT, the shared `WebFilter` chain runs in
-priority order. Filters are listed below as they apply to this gateway's
-`Path=/**` backend route:
+priority order. Filters are listed below as they apply to this repo's own
+`Path=/**` overlay route (see the **Status** section's "two different route
+tables" note — the live cluster's actual route set is broader and externally
+sourced, so treat "this gateway's route" below as this repo's contribution,
+not necessarily the pod's full live route table):
 
 | Order | Filter | Role in front of the API |
 |------:|--------|--------------------------|
@@ -282,9 +321,12 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 
 - **Gateways** — one shared `snapdragon-gateway` image powers every gateway in the
   platform. This overlay is the backend instance. The `fe-gateway` and identity
-  gateways (`pki-gateway`, `id-gateway`) are siblings built the same way. An
-  optional games gateway is a further sibling, created when the opt-in games
-  service is enabled.
+  gateways (`pki-gateway`, `id-gateway`) are siblings built the same way. The
+  optional `games.snapdragon.systems` surface is **not** a separate games-specific
+  gateway sibling — per `deploy/ingress.yaml` + `deploy/configmap.yaml`, this
+  be-gateway instance fronts it directly (its own route table carries the
+  `games` and `games-servers-console` routes) when the opt-in games service is
+  enabled; there is no distinct games gateway pod.
 - **Casdoor** — this gateway is a resource server only. It validates JWTs minted
   by the brand's Casdoor instance and never exposes a login endpoint itself.
   Browser-facing login (a native form in each service's own login-ui, POSTing to
@@ -298,6 +340,26 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   `SPRING_APPLICATION_NAME`, and route-access rows. The `DOMAIN_<x>` authority
   and the cross-domain hard-deny together enforce brand isolation at the network
   edge.
+
+---
+
+## Known Gaps
+
+- **TODO: reconcile the two route tables.** `application-be.yml`'s single
+  `Path=/**` catch-all + the Liquibase `gateway_routes` seed describe only this
+  repo's own overlay contribution. The route table actually mounted on the live
+  pod (per `deploy/configmap.yaml`, a snapshot captured by PR #9) is sourced
+  from the `snapdragon-gateway` Helm chart in `snapdragon-generator` instead,
+  and has no bare catch-all at all (games/matrix/mastodon/headscale-forward/
+  federation-api/snapdragon-api only). Confirm which is authoritative today and
+  re-verify `deploy/` is still byte-identical to the live render — it was last
+  confirmed on 2026-06-23 and hasn't been re-synced since. See **Status** above.
+- **TODO: confirm whether this repo's overlay image is consumed anywhere.**
+  `deploy/deployment.yaml`'s snapshot of the live Deployment runs the base
+  `snapdragon-systems/gateway:dev` image directly, not an image built from this
+  repo's `Dockerfile`. If `.gitlab-ci.yml`'s build+push output is genuinely
+  unused in production today, either wire it in or say so plainly here instead
+  of implying it's the deployed artifact.
 
 ---
 
