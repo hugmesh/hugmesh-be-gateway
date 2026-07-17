@@ -122,6 +122,23 @@ spec:
               value: "8080"
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
               value: "file:/config/,file:/stores/"
+            # Activates the "routes" profile so the mounted ConfigMap's
+            # application-routes.yml (this gateway's entire downstream route
+            # table) is actually loaded. SPRING_CONFIG_ADDITIONAL_LOCATION above
+            # only adds a SEARCH DIRECTORY — it does not activate a profile — and
+            # application-routes.yml is a profile-specific document, so it would
+            # otherwise silently never load, leaving only the packaged
+            # application.yml's api-default fallback route active. Same root
+            # cause + fix as the source chart (snapdragon-generator
+            # specs/cluster/charts/snapdragon-gateway/templates/deployment.yaml)
+            # and compose.local.yaml (generator#261).
+            #
+            # This dark copy was rendered 2026-06-23, BEFORE the source chart
+            # gained this line, so it is a stale render rather than a divergence
+            # from it — re-syncing deploy/ against the chart would also produce
+            # this env entry.
+            - name: SPRING_PROFILES_ACTIVE
+              value: "routes"
             - name: CASDOOR_ISSUER_URI
               value: "https://id.snapdragon.systems"
             - name: CASDOOR_JWKS_URI

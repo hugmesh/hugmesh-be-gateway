@@ -354,12 +354,40 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   federation-api/snapdragon-api only). Confirm which is authoritative today and
   re-verify `deploy/` is still byte-identical to the live render — it was last
   confirmed on 2026-06-23 and hasn't been re-synced since. See **Status** above.
-- **TODO: confirm whether this repo's overlay image is consumed anywhere.**
-  `deploy/deployment.yaml`'s snapshot of the live Deployment runs the base
-  `snapdragon-systems/gateway:dev` image directly, not an image built from this
-  repo's `Dockerfile`. If `.gitlab-ci.yml`'s build+push output is genuinely
-  unused in production today, either wire it in or say so plainly here instead
-  of implying it's the deployed artifact.
+- **~~TODO: confirm whether this repo's overlay image is consumed anywhere.~~ —
+  ANSWERED 2026-07-17: it is not.** Saying so plainly, as this entry asked.
+  `.gitlab-ci.yml` builds and pushes this overlay image, but **nothing deploys
+  it**. Four independent checks against `snapdragon-generator`'s `origin/main`:
+  1. All three gateway ArgoCD Applications (`specs/cluster/apps/20-gateway-{be,
+     fe,pki}.yaml`) set `path: specs/cluster/charts/snapdragon-gateway` — they
+     deploy the **chart**, not this repo — and none overrides the image, so all
+     three run the chart default
+     `registry.snapdragon.systems/snapdragon/snapdragon-gateway` (the shared
+     **base** image).
+  2. `GATEWAY_IMAGE` — this repo's only build-arg seam — appears **nowhere** in
+     `snapdragon-generator`.
+  3. An org-wide grep for `image:.*snapdragon-(be|fe|pki)-gateway` returns
+     **nothing**.
+  4. `snapdragon-generator`'s only mentions of the string `snapdragon-be-gateway`
+     are non-deploy uses: the OWASP SCA scan matrix, the `route-access` seed SQL
+     (that's `spring.application.name`, not an image), and ArgoCD
+     `releaseName`/`instance.name` values.
+
+  `deploy/deployment.yaml` likewise runs the base image directly. So this repo's
+  `Dockerfile` / `application-be.yml` / Liquibase overlay mechanism is **not
+  exercised by any real deployment path today** — it is a standalone artifact.
+  Whether that is intentional (this repo predates the generator's
+  route-templating approach and is now vestigial) or an oversight is a product
+  decision, not a code fix. Recorded here so nobody assumes `docker build .` of
+  this repo produces what actually runs.
+- **`deploy/`'s image coordinates have drifted from the chart.**
+  `deploy/deployment.yaml` and `deploy/kustomization.yaml` pin
+  `snapdragon-systems/gateway:dev` and describe it as the chart default, but the
+  chart's current `values.yaml` says
+  `registry.snapdragon.systems/snapdragon/snapdragon-gateway:dev`. Both files
+  claim to reproduce the live Helm render 1:1; on image coords they no longer do.
+  Same 2026-06-23 staleness root cause as the route-table divergence above — fold
+  it into the same re-sync rather than patching piecemeal.
 
 ---
 
