@@ -1,7 +1,7 @@
 # hugmesh-be-gateway
 
 The **backend front door** of a HugMesh brand: a per-brand deployment of the
-shared [hugmesh-gateway](https://github.com/HugMesh/hugmesh-gateway)
+shared [hugmesh-gateway](https://github.com/Snapdragon-Systems/hugmesh-gateway)
 Spring Cloud Gateway, placed in the **backend tier** to sit in front of the
 backend API and the social homeservers (Matrix / Mastodon).
 
@@ -42,7 +42,26 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
 
 ## Status
 
-- **Last synced:** 2026-07-16
+- **Last synced:** 2026-07-22
+- **Overlay config now actually loads — fixed & shipped on `main` (PR #17,
+  2026-07-17).** `application-be.yml` is a profile-specific document
+  (`application-{profile}.yml`); `SPRING_CONFIG_ADDITIONAL_LOCATION` only adds a
+  config *search directory*, it does **not** activate a profile. `Dockerfile` now
+  sets `ENV SPRING_PROFILES_ACTIVE=be` so the file is actually read. Before this
+  fix the overlay route was silently never loaded and the image fell back to the
+  base image's packaged `application.yml` (an `api-default` `/api/**` route) — a
+  half-working gateway serving the wrong route table, not a clean failure. The
+  dark `deploy/deployment.yaml` copy picked up the analogous
+  `SPRING_PROFILES_ACTIVE=routes` line in the same PR; that path stays latent
+  until the Forgejo cutover.
+- **Rebrand — Snapdragon → HugMesh (PR #18, 2026-07-22).** Image name,
+  `SPRING_APPLICATION_NAME`, k8s resource names/labels, the `hugmesh-backend`
+  namespace literal, and domain-derived config defaults (`id.hugmesh.systems`
+  issuer, `api./scale./games.hugmesh.systems` ingress hosts) are renamed. The
+  Cassandra keyspace literal `snapdragon_gateway` in `deploy/deployment.yaml` was
+  deliberately left unchanged pending a real keyspace migration, and all of this
+  `deploy/` content still ships dark (see below) so the rename has no live effect
+  yet.
 - **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.2** ecosystem
   baseline (on Java 25) through the inherited `hugmesh-gateway` image (shared
   `hugmesh-parent` 2.7.0 metapom + `hugmesh-commons` 2.7.0 security/tenancy). This overlay
@@ -147,7 +166,7 @@ CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this rep
 
 > **Reference summary only — not local behavior.** Everything in this section is
 > owned by and **authoritative in**
-> [`hugmesh-gateway`](https://github.com/HugMesh/hugmesh-gateway),
+> [`hugmesh-gateway`](https://github.com/Snapdragon-Systems/hugmesh-gateway),
 > not in this repo. This overlay contributes only `application-be.yml` plus the
 > `gateway_routes` seed (see [What's in this repo](#whats-in-this-repo)). Treat
 > the descriptions below as a convenience digest; if they drift from the base
