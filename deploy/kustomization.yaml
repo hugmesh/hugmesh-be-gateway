@@ -1,10 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# The live ArgoCD Application (snapdragon-generator apps/20-gateway-be.yaml) sets
+# The live ArgoCD Application (hugmesh-generator apps/20-gateway-be.yaml) sets
 # the target namespace via destination.namespace; the Helm render carries none, so
 # we pin it HERE to reproduce that placement when the catalog ApplicationSet (which
 # sets no destination.namespace) generates the Application from this deploy/ dir.
-namespace: snapdragon-backend
+namespace: hugmesh-backend
 resources:
   - serviceaccount.yaml
   - configmap.yaml
@@ -13,20 +13,20 @@ resources:
   - ingress.yaml
 # ── IMAGE / REGISTRY (intentional fidelity note) ─────────────────────────────
 # The kustomize-based services (forum-bff-api, remote-fragment, forum-ui, …) rewrite
-# their first-party image to registry.snapdragon.systems/snapdragon/<repo>:main and
+# their first-party image to registry.hugmesh.systems/hugmesh/<repo>:main and
 # add the gitlab-registry imagePullSecret here. The gateway is DIFFERENT today: it
-# deploys from the snapdragon-gateway Helm CHART with image snapdragon-systems/gateway:dev
+# deploys from the hugmesh-gateway Helm CHART with image hugmesh-systems/gateway:dev
 # (chart default), NO registry rewrite and NO imagePullSecret in the live render
 # (apps/20-gateway-be.yaml sets neither). To make deploy/ reproduce TODAY's behavior
 # 1:1 we DELIBERATELY mirror that: no images: rewrite, no imagePullSecrets patch.
 #
 # When the source eventually flips to Forgejo, align the gateway image coords with
-# the rest of the fleet (registry.snapdragon.systems/snapdragon/snapdragon-be-gateway
+# the rest of the fleet (registry.hugmesh.systems/hugmesh/hugmesh-be-gateway
 # :main + gitlab-registry pull secret) by uncommenting the block below. Left commented
 # so this PR is purely additive/dark and changes nothing about the current deployment.
 #
 # images:
-#   - { name: snapdragon-systems/gateway, newName: registry.snapdragon.systems/snapdragon/snapdragon-be-gateway, newTag: main }
+#   - { name: hugmesh-systems/gateway, newName: registry.hugmesh.systems/hugmesh/hugmesh-be-gateway, newTag: main }
 # patches:
 #   - target: { kind: Deployment }
 #     patch: |

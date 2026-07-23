@@ -1,49 +1,49 @@
-# RENDERED from snapdragon-generator specs/cluster/charts/snapdragon-gateway
+# RENDERED from hugmesh-generator specs/cluster/charts/hugmesh-gateway
 # (templates/service.yaml ingress block) with the be-gateway ingress values from
-# apps/20-gateway-be.yaml (className nginx, host api.snapdragon.systems, extraHosts
-# scale./games.snapdragon.systems). The in-cluster nginx Ingress is the SECONDARY
+# apps/20-gateway-be.yaml (className nginx, host api.hugmesh.systems, extraHosts
+# scale./games.hugmesh.systems). The in-cluster nginx Ingress is the SECONDARY
 # path; Cloudflare Tunnel (manifests/cloudflared) is the primary external edge.
-# Kept verbatim — Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+# Kept verbatim — Forgejo-cutover dark copy; see ../hugmesh-deploy.yaml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: snapdragon-be-gateway
+  name: hugmesh-be-gateway
   labels:
-    app.kubernetes.io/name: snapdragon-be-gateway
-    app.kubernetes.io/instance: snapdragon-be-gateway
-    app.kubernetes.io/part-of: snapdragon.systems
+    app.kubernetes.io/name: hugmesh-be-gateway
+    app.kubernetes.io/instance: hugmesh-be-gateway
+    app.kubernetes.io/part-of: hugmesh.systems
     app.kubernetes.io/component: gateway
-    helm.sh/chart: snapdragon-gateway-0.1.0
+    helm.sh/chart: hugmesh-gateway-0.1.0
 spec:
   ingressClassName: nginx
   rules:
-    - host: "api.snapdragon.systems"
+    - host: "api.hugmesh.systems"
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: snapdragon-be-gateway
+                name: hugmesh-be-gateway
                 port:
                   number: 8080
-    - host: "scale.snapdragon.systems"
+    - host: "scale.hugmesh.systems"
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: snapdragon-be-gateway
+                name: hugmesh-be-gateway
                 port:
                   number: 8080
-    - host: "games.snapdragon.systems"
+    - host: "games.hugmesh.systems"
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: snapdragon-be-gateway
+                name: hugmesh-be-gateway
                 port:
                   number: 8080

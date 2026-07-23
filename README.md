@@ -1,15 +1,15 @@
-# snapdragon-be-gateway
+# hugmesh-be-gateway
 
-The **backend front door** of a Snapdragon brand: a per-brand deployment of the
-shared [snapdragon-gateway](https://github.com/Snapdragon-Systems/snapdragon-gateway)
+The **backend front door** of a HugMesh brand: a per-brand deployment of the
+shared [hugmesh-gateway](https://github.com/HugMesh/hugmesh-gateway)
 Spring Cloud Gateway, placed in the **backend tier** to sit in front of the
 backend API and the social homeservers (Matrix / Mastodon).
 
 This repo is **not its own service codebase**. It is a thin **overlay** — a
 minimal `Dockerfile` plus a config file and a Liquibase changelog — that re-uses
-the audited `snapdragon-gateway` image and changes only three things:
+the audited `hugmesh-gateway` image and changes only three things:
 
-1. its **identity** — `SPRING_APPLICATION_NAME=snapdragon-be-gateway`;
+1. its **identity** — `SPRING_APPLICATION_NAME=hugmesh-be-gateway`;
 2. its **route set** — a single catch-all `Path=/**` route to the backend API;
 3. its **downstream URI** — the in-cluster API service URL.
 
@@ -21,9 +21,9 @@ runs identical, audited gateway code regardless of node type.
 ```mermaid
 flowchart TB
     client["External caller\n(JWT in Authorization header)"]
-    beg["snapdragon-be-gateway\n(this repo — overlay image)"]
-    api["snapdragon-api\n(backend API service)"]
-    base["snapdragon-gateway\n(shared base image)"]
+    beg["hugmesh-be-gateway\n(this repo — overlay image)"]
+    api["hugmesh-api\n(backend API service)"]
+    base["hugmesh-gateway\n(shared base image)"]
 
     client -->|HTTPS + Casdoor JWT| beg
     beg -->|"proxy (HTTP or mTLS)"| api
@@ -31,11 +31,11 @@ flowchart TB
 ```
 
 ```bash
-# GATEWAY_IMAGE must point at the sibling snapdragon-gateway image.
+# GATEWAY_IMAGE must point at the sibling hugmesh-gateway image.
 # CI resolves this automatically from the same namespace (see .gitlab-ci.yml);
 # for local builds, supply whatever tag you have pulled locally.
-docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/snapdragon-gateway:dev \
-  -t snapdragon-systems/be-gateway:dev .
+docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
+  -t hugmesh-systems/be-gateway:dev .
 ```
 
 ---
@@ -44,8 +44,8 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/snapdragon-gateway:dev
 
 - **Last synced:** 2026-07-16
 - **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.2** ecosystem
-  baseline (on Java 25) through the inherited `snapdragon-gateway` image (shared
-  `snapdragon-parent` 2.7.0 metapom + `snapdragon-commons` 2.7.0 security/tenancy). This overlay
+  baseline (on Java 25) through the inherited `hugmesh-gateway` image (shared
+  `hugmesh-parent` 2.7.0 metapom + `hugmesh-commons` 2.7.0 security/tenancy). This overlay
   carries no Java of its own, so it inherits the baseline transparently on the next
   build of the pinned `GATEWAY_IMAGE`.
 - **SCG 5.0 route namespace — fixed & shipped on `main`.** Spring Cloud Gateway 5.0
@@ -62,13 +62,13 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/snapdragon-gateway:dev
   swap live **upstream of this overlay** (login-ui + user-bff + the shared gateway
   pre-security filter), so nothing in this repo changes for that model.
 - **Authorization data source.** Route-access rows remain admin-managed in Postgres
-  (`gateway_route_access`, source of truth), CRUDed by `snapdragon-admin-bff-api`;
+  (`gateway_route_access`, source of truth), CRUDed by `hugmesh-admin-bff-api`;
   this repo only seeds the `be-default` row into the `gateway_routes` **registry**.
 - **Forgejo service-catalog deploy descriptor — shipped dark on `main`.** A
-  `snapdragon-deploy.yaml` descriptor + a `deploy/` kustomize dir (the gateway Helm
+  `hugmesh-deploy.yaml` descriptor + a `deploy/` kustomize dir (the gateway Helm
   chart rendered byte-for-byte to static manifests) are on `main` for the Phase-6
   Forgejo catalog ApplicationSet. They **change nothing running**: the live ArgoCD
-  source is still the `snapdragon-gateway` Helm chart in `snapdragon-generator`, and
+  source is still the `hugmesh-gateway` Helm chart in `hugmesh-generator`, and
   the GitHub-rooted control plane ignores these files until the Forgejo cutover.
 - **Two different route tables exist — do not conflate them.** This repo's own
   overlay contribution (`application-be.yml` + the Liquibase `gateway_routes` seed)
@@ -76,11 +76,11 @@ docker build --build-arg GATEWAY_IMAGE=snapdragon-systems/snapdragon-gateway:dev
   of what this repo emits. But `deploy/configmap.yaml` (captured by PR #9 as a
   byte-identical snapshot of the **live** Helm-rendered route ConfigMap actually
   mounted onto the be-gateway pod) shows the route table the cluster runs today is
-  sourced from `snapdragon-generator`'s `apps/20-gateway-be.yaml` Helm values, not
+  sourced from `hugmesh-generator`'s `apps/20-gateway-be.yaml` Helm values, not
   from this repo, and is materially richer: 11 explicit routes (games, matrix,
-  mastodon, headscale-forward, federation-api, snapdragon-api) with **no bare
+  mastodon, headscale-forward, federation-api, hugmesh-api) with **no bare
   `Path=/**` entry at all**. `deploy/deployment.yaml` also shows the live pod
-  running the **base** `snapdragon-systems/gateway:dev` image directly, not an
+  running the **base** `hugmesh-systems/gateway:dev` image directly, not an
   image built from this repo's `Dockerfile` — so it's unclear from this repo alone
   whether the overlay image `.gitlab-ci.yml` builds and pushes is consumed by
   anything today. That snapshot was verified byte-identical on **2026-06-23**
@@ -97,8 +97,8 @@ flowchart TB
     end
 
     subgraph live["Live cluster today — Helm chart path"]
-        chart["snapdragon-gateway Helm chart\n(snapdragon-generator repo)"]
-        cm["rendered route ConfigMap\n(games / matrix / mastodon /\nheadscale-forward / federation-api /\nsnapdragon-api -- no bare catch-all)"]
+        chart["hugmesh-gateway Helm chart\n(hugmesh-generator repo)"]
+        cm["rendered route ConfigMap\n(games / matrix / mastodon /\nheadscale-forward / federation-api /\nhugmesh-api -- no bare catch-all)"]
         pod["running be-gateway pod\n(base image + this ConfigMap)"]
         chart --> cm --> pod
     end
@@ -115,15 +115,15 @@ flowchart TB
 | | |
 |---|---|
 | **Tier** | backend (data-plane front door) |
-| **Namespace** | `snapdragon-backend` |
-| **Identity** | `snapdragon-be-gateway` (the `gateway` column for its route-access rows) |
-| **Downstream** | `snapdragon-api.snapdragon-backend.svc.cluster.local:8080` (override `DOWNSTREAM_URI`) |
+| **Namespace** | `hugmesh-backend` |
+| **Identity** | `hugmesh-be-gateway` (the `gateway` column for its route-access rows) |
+| **Downstream** | `hugmesh-api.hugmesh-backend.svc.cluster.local:8080` (override `DOWNSTREAM_URI`) |
 | **Auth** | validates the **internal Casdoor JWT** as an OAuth2 resource server; **no external login is exposed** |
-| **Base image** | `snapdragon-gateway` (one image, differentiated by `SPRING_APPLICATION_NAME`) |
+| **Base image** | `hugmesh-gateway` (one image, differentiated by `SPRING_APPLICATION_NAME`) |
 
 A brand typically runs several gateway instances off this one shared image —
-`snapdragon-be-gateway` (backend), `snapdragon-fe-gateway` (front door),
-`snapdragon-pki-gateway` / `snapdragon-id-gateway` (identity), etc. — each
+`hugmesh-be-gateway` (backend), `hugmesh-fe-gateway` (front door),
+`hugmesh-pki-gateway` / `hugmesh-id-gateway` (identity), etc. — each
 differentiated only by its `SPRING_APPLICATION_NAME`, route set, and
 route-access rows. This repo is the backend instance.
 
@@ -135,26 +135,26 @@ route-access rows. This repo is the backend instance.
 | `application-be.yml` | overlay config: `application.name`, the Casdoor `issuer-uri`, and the single `be-default` `Path=/**` route to the API, declared under `spring.cloud.gateway.server.webflux.routes` (SCG 5.0 / Boot 4 namespace; loaded via `SPRING_CONFIG_ADDITIONAL_LOCATION`) |
 | `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog** — the entry point the base gateway image runs; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`) |
 | `liquibase/changelog/001-gateway-routes.xml` | seeds the `be-default` route (`Path=/**` → API) into the DB-backed route **registry** (`gateway_routes`) |
-| `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `snapdragon-gateway` image in the same in-cluster GitLab registry namespace |
-| `snapdragon-deploy.yaml` | per-repo deploy descriptor for the Phase-6 Forgejo **service-catalog** ApplicationSet (name/namespace/image/port). **Ships dark:** the live ArgoCD source today is the `snapdragon-gateway` Helm chart in `snapdragon-generator`, so this descriptor + `deploy/` change nothing running until the Forgejo cutover |
+| `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `hugmesh-gateway` image in the same in-cluster GitLab registry namespace |
+| `hugmesh-deploy.yaml` | per-repo deploy descriptor for the Phase-6 Forgejo **service-catalog** ApplicationSet (name/namespace/image/port). **Ships dark:** the live ArgoCD source today is the `hugmesh-gateway` Helm chart in `hugmesh-generator`, so this descriptor + `deploy/` change nothing running until the Forgejo cutover |
 | `deploy/` | the gateway Helm chart **rendered to static kustomize manifests** (`serviceaccount`/`configmap`/`service`/`deployment`/`ingress` + `kustomization.yaml`) — a verbatim, byte-identical dark copy of today's live render, kept for the Forgejo-source cutover; not consulted by the current GitHub-rooted ArgoCD |
 
 CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this repo.
 
 ---
 
-## Inherited capabilities (from `snapdragon-gateway`)
+## Inherited capabilities (from `hugmesh-gateway`)
 
 > **Reference summary only — not local behavior.** Everything in this section is
 > owned by and **authoritative in**
-> [`snapdragon-gateway`](https://github.com/Snapdragon-Systems/snapdragon-gateway),
+> [`hugmesh-gateway`](https://github.com/HugMesh/hugmesh-gateway),
 > not in this repo. This overlay contributes only `application-be.yml` plus the
 > `gateway_routes` seed (see [What's in this repo](#whats-in-this-repo)). Treat
 > the descriptions below as a convenience digest; if they drift from the base
 > gateway, the base repo wins.
 >
 > The base image is pinned by tag via the `GATEWAY_IMAGE` build-arg (CI passes
-> `.../snapdragon-gateway:$CI_COMMIT_REF_SLUG`; see `.gitlab-ci.yml`), so the
+> `.../hugmesh-gateway:$CI_COMMIT_REF_SLUG`; see `.gitlab-ci.yml`), so the
 > exact inherited code is traceable per build. To change base-gateway behavior,
 > edit that repo — not this one.
 
@@ -165,7 +165,7 @@ the backend front door are described below.
 ### Casdoor resource server + role authorities
 
 Every request must carry a valid internal Casdoor JWT (issuer `CASDOOR_ISSUER_URI`,
-default `https://id.snapdragon.systems`). The shared `CasdoorAuthorities` converter
+default `https://id.hugmesh.systems`). The shared `CasdoorAuthorities` converter
 maps the JWT claims to Spring Security authorities as follows:
 
 - Every authenticated principal receives a `ROLE_USER` floor authority.
@@ -258,14 +258,14 @@ Requests that carry an opaque homeserver bearer token instead of a Casdoor JWT
 roles or users may reach which URLs through **this** gateway. **Postgres is the
 source of truth** (`ROUTE_ACCESS_R2DBC_URL`): on startup the pod loads the
 `gateway_route_access` rows scoped to its own `spring.application.name` (=
-`snapdragon-be-gateway`), write-through-mirrors them into Cassandra as a
+`hugmesh-be-gateway`), write-through-mirrors them into Cassandra as a
 read-cache, and refreshes on each tick. The fallback chain is:
 
 1. Postgres (authoritative) — used when reachable.
 2. Cassandra cache — used when Postgres is briefly unavailable.
 3. Baked-in canonical seed — last resort; **never silently fail-open**.
 
-The admin-bff service (`snapdragon-admin-bff-api`) creates and manages the
+The admin-bff service (`hugmesh-admin-bff-api`) creates and manages the
 canonical `gateway_route_access` rows. Match semantics: longest `url_pattern`
 wins; an explicit `allow=false` row denies; the `PUBLIC` sentinel permits
 anonymous traffic.
@@ -274,15 +274,15 @@ anonymous traffic.
 > not confuse them. This repo's Liquibase changelog seeds only the
 > `gateway_routes` **route registry** (one row: `be-default`, `Path=/**` → API).
 > The `gateway_route_access` **authorization** rows scoped to
-> `spring.application.name=snapdragon-be-gateway` are seeded and managed
-> exclusively by `snapdragon-admin-bff-api`, not here.
+> `spring.application.name=hugmesh-be-gateway` are seeded and managed
+> exclusively by `hugmesh-admin-bff-api`, not here.
 
 ### Downstream mTLS (gateway → API)
 
 When the backend API enforces mTLS (`server.ssl.client-auth=need`), set
-`SNAPDRAGON_GATEWAY_MTLS_ENABLED=true`. The gateway will then present a client
+`HUGMESH_GATEWAY_MTLS_ENABLED=true`. The gateway will then present a client
 certificate chaining to the cluster CA on the outbound proxy leg; the key material
-is assembled in-pod from `snapdragon.tls.*` properties (passwords are never stored
+is assembled in-pod from `hugmesh.tls.*` properties (passwords are never stored
 in git). The default is `false`, which keeps local, dev, and CI environments
 proxying over plain `http://`. **Inbound (public) callers are unaffected** — this
 flag controls only the gateway's outbound TLS client identity.
@@ -292,17 +292,17 @@ flag controls only the gateway's outbound TLS client identity.
 ## Configuration
 
 The table below covers the env vars relevant to this overlay. The full set of
-base-gateway variables is documented in `snapdragon-gateway`.
+base-gateway variables is documented in `hugmesh-gateway`.
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `SPRING_APPLICATION_NAME` | `snapdragon-be-gateway` | gateway identity + route-access `gateway` key (baked into the image) |
-| `CASDOOR_ISSUER_URI` | `https://id.snapdragon.systems` | trusted Casdoor issuer for JWT validation |
-| `DOWNSTREAM_URI` | `http://snapdragon-api.snapdragon-backend.svc.cluster.local:8080` | the API this gateway fronts |
+| `SPRING_APPLICATION_NAME` | `hugmesh-be-gateway` | gateway identity + route-access `gateway` key (baked into the image) |
+| `CASDOOR_ISSUER_URI` | `https://id.hugmesh.systems` | trusted Casdoor issuer for JWT validation |
+| `DOWNSTREAM_URI` | `http://hugmesh-api.hugmesh-backend.svc.cluster.local:8080` | the API this gateway fronts |
 | `APP_TENANCY_ISSUERS` | _(empty)_ | CSV `issuerUri=domain,…` — enables multi-brand mode (empty ⇒ single-tenant `default`) |
 | `APP_TENANCY_HOSTS` | _(empty)_ | CSV `hostSuffix=domain,…` — defense-in-depth Host→domain map |
 | `ROUTE_ACCESS_R2DBC_URL` | _(empty)_ | Postgres source-of-truth for route-access rows (empty ⇒ Cassandra-cache/seed only) |
-| `SNAPDRAGON_GATEWAY_MTLS_ENABLED` | `false` | Present a client certificate to the mTLS-enforcing backend API. |
+| `HUGMESH_GATEWAY_MTLS_ENABLED` | `false` | Present a client certificate to the mTLS-enforcing backend API. |
 
 **Multi-tenant example** — to trust two brands with separate Casdoor instances:
 
@@ -319,10 +319,10 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 
 ## Relationship to the platform
 
-- **Gateways** — one shared `snapdragon-gateway` image powers every gateway in the
+- **Gateways** — one shared `hugmesh-gateway` image powers every gateway in the
   platform. This overlay is the backend instance. The `fe-gateway` and identity
   gateways (`pki-gateway`, `id-gateway`) are siblings built the same way. The
-  optional `games.snapdragon.systems` surface is **not** a separate games-specific
+  optional `games.hugmesh.systems` surface is **not** a separate games-specific
   gateway sibling — per `deploy/ingress.yaml` + `deploy/configmap.yaml`, this
   be-gateway instance fronts it directly (its own route table carries the
   `games` and `games-servers-console` routes) when the opt-in games service is
@@ -349,26 +349,26 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   `Path=/**` catch-all + the Liquibase `gateway_routes` seed describe only this
   repo's own overlay contribution. The route table actually mounted on the live
   pod (per `deploy/configmap.yaml`, a snapshot captured by PR #9) is sourced
-  from the `snapdragon-gateway` Helm chart in `snapdragon-generator` instead,
+  from the `hugmesh-gateway` Helm chart in `hugmesh-generator` instead,
   and has no bare catch-all at all (games/matrix/mastodon/headscale-forward/
-  federation-api/snapdragon-api only). Confirm which is authoritative today and
+  federation-api/hugmesh-api only). Confirm which is authoritative today and
   re-verify `deploy/` is still byte-identical to the live render — it was last
   confirmed on 2026-06-23 and hasn't been re-synced since. See **Status** above.
 - **~~TODO: confirm whether this repo's overlay image is consumed anywhere.~~ —
   ANSWERED 2026-07-17: it is not.** Saying so plainly, as this entry asked.
   `.gitlab-ci.yml` builds and pushes this overlay image, but **nothing deploys
-  it**. Four independent checks against `snapdragon-generator`'s `origin/main`:
+  it**. Four independent checks against `hugmesh-generator`'s `origin/main`:
   1. All three gateway ArgoCD Applications (`specs/cluster/apps/20-gateway-{be,
-     fe,pki}.yaml`) set `path: specs/cluster/charts/snapdragon-gateway` — they
+     fe,pki}.yaml`) set `path: specs/cluster/charts/hugmesh-gateway` — they
      deploy the **chart**, not this repo — and none overrides the image, so all
      three run the chart default
-     `registry.snapdragon.systems/snapdragon/snapdragon-gateway` (the shared
+     `registry.hugmesh.systems/hugmesh/hugmesh-gateway` (the shared
      **base** image).
   2. `GATEWAY_IMAGE` — this repo's only build-arg seam — appears **nowhere** in
-     `snapdragon-generator`.
-  3. An org-wide grep for `image:.*snapdragon-(be|fe|pki)-gateway` returns
+     `hugmesh-generator`.
+  3. An org-wide grep for `image:.*hugmesh-(be|fe|pki)-gateway` returns
      **nothing**.
-  4. `snapdragon-generator`'s only mentions of the string `snapdragon-be-gateway`
+  4. `hugmesh-generator`'s only mentions of the string `hugmesh-be-gateway`
      are non-deploy uses: the OWASP SCA scan matrix, the `route-access` seed SQL
      (that's `spring.application.name`, not an image), and ArgoCD
      `releaseName`/`instance.name` values.
@@ -382,9 +382,9 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   this repo produces what actually runs.
 - **`deploy/`'s image coordinates have drifted from the chart.**
   `deploy/deployment.yaml` and `deploy/kustomization.yaml` pin
-  `snapdragon-systems/gateway:dev` and describe it as the chart default, but the
+  `hugmesh-systems/gateway:dev` and describe it as the chart default, but the
   chart's current `values.yaml` says
-  `registry.snapdragon.systems/snapdragon/snapdragon-gateway:dev`. Both files
+  `registry.hugmesh.systems/hugmesh/hugmesh-gateway:dev`. Both files
   claim to reproduce the live Helm render 1:1; on image coords they no longer do.
   Same 2026-06-23 staleness root cause as the route-table divergence above — fold
   it into the same re-sync rather than patching piecemeal.
@@ -397,7 +397,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 > merged · 🔭 **planned** = design-complete, no code yet. Nothing below is shipped
 > on `main`. All items below are **upstream / inherited** changes — none are
 > expected to require edits to the files in this overlay repo, but each will affect
-> how this be-gateway behaves once the base `snapdragon-gateway` image (pinned by
+> how this be-gateway behaves once the base `hugmesh-gateway` image (pinned by
 > `GATEWAY_IMAGE`) picks them up.
 
 - 🚧 **SSO end-to-end + e2e.** The native-login model (each service's own login-ui
@@ -412,7 +412,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   authority mapping with **fail-closed** enforcement. Once shipped upstream, the
   be-gateway will inherit `mfa_required` checks on its backend routes automatically.
   No change to this repo is required — the effect is entirely in the
-  `gateway_route_access` rows managed by admin-bff for `snapdragon-be-gateway`.
+  `gateway_route_access` rows managed by admin-bff for `hugmesh-be-gateway`.
 - 🚧 **New backend API surfaces behind `Path=/**`.** Notifications external channels
   (Matrix DM / Akkoma feed / phpBB / email adapters) and the Workload Console
   (admin-bff changelog 110-band) add new API endpoints that the catch-all route
@@ -420,7 +420,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   surface, those endpoints must be marked roadmap rather than shipped.
 - 🔭 **Auth-core relocation (upstream).** Login/session/account logic is being
   relocated from admin-bff to user-bff, with shared account/session/MFA/Casdoor-admin
-  infra extracted to `snapdragon-auth-core` (consumed by user-bff + admin-bff only).
+  infra extracted to `hugmesh-auth-core` (consumed by user-bff + admin-bff only).
   This is invisible to the be-gateway — it still validates the internal Casdoor JWT —
   but it is why admin-bff remains the CRUD owner of `gateway_route_access` while
   account/session **data** stays in admin-bff-db.

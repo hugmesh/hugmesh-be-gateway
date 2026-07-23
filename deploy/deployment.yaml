@@ -1,9 +1,9 @@
-# RENDERED from snapdragon-generator specs/cluster/charts/snapdragon-gateway
+# RENDERED from hugmesh-generator specs/cluster/charts/hugmesh-gateway
 # (templates/deployment.yaml) with the be-gateway values from apps/20-gateway-be.yaml
 # (keystore.enabled=true, mTLS init, nodeSelector backend, seLinux s0:c12,
-# SNAPDRAGON_GATEWAY_MTLS_ENABLED=true, route-access-be-gateway DB identity).
+# HUGMESH_GATEWAY_MTLS_ENABLED=true, route-access-be-gateway DB identity).
 # Kept verbatim so deploy/ reproduces TODAY's Helm-rendered Deployment 1:1 — this is
-# the Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+# the Forgejo-cutover dark copy; see ../hugmesh-deploy.yaml.
 #
 # checksum/routes is the helm sha256sum of the rendered configmap.yaml; preserved so
 # the pod template is byte-identical to the live render. Keep it in sync with
@@ -12,28 +12,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: snapdragon-be-gateway
+  name: hugmesh-be-gateway
   labels:
-    app.kubernetes.io/name: snapdragon-be-gateway
-    app.kubernetes.io/instance: snapdragon-be-gateway
-    app.kubernetes.io/part-of: snapdragon.systems
+    app.kubernetes.io/name: hugmesh-be-gateway
+    app.kubernetes.io/instance: hugmesh-be-gateway
+    app.kubernetes.io/part-of: hugmesh.systems
     app.kubernetes.io/component: gateway
-    helm.sh/chart: snapdragon-gateway-0.1.0
+    helm.sh/chart: hugmesh-gateway-0.1.0
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: snapdragon-be-gateway
-      app.kubernetes.io/instance: snapdragon-be-gateway
+      app.kubernetes.io/name: hugmesh-be-gateway
+      app.kubernetes.io/instance: hugmesh-be-gateway
   template:
     metadata:
       annotations:
         checksum/routes: 442e41ca91003548e98ff1d18447e2036cea39aea4975ff4882a3b1567069a82
       labels:
-        app.kubernetes.io/name: snapdragon-be-gateway
-        app.kubernetes.io/instance: snapdragon-be-gateway
+        app.kubernetes.io/name: hugmesh-be-gateway
+        app.kubernetes.io/instance: hugmesh-be-gateway
     spec:
-      serviceAccountName: snapdragon-be-gateway
+      serviceAccountName: hugmesh-be-gateway
       # The gateway is a Spring Cloud Gateway resource server: it validates the
       # Casdoor JWT + routes to upstreams and NEVER calls the Kubernetes API, so
       # its ServiceAccount token must not be mounted. NIST 800-53 AC-6 (least
@@ -48,17 +48,17 @@ spec:
           type: container_t
           level: "s0:c12"
       nodeSelector:
-        snapdragon.systems/backend: "true"
+        hugmesh.systems/backend: "true"
       initContainers:
         # Build the PKCS12 keystore (mTLS identity) + JRE truststore from the
         # Vault-PKI-issued, ESO-synced PEM Secret
-        # (snapdragon-be-gateway-mtls: tls.crt/tls.key/ca.crt).
+        # (hugmesh-be-gateway-mtls: tls.crt/tls.key/ca.crt).
         # keytool + openssl ship in the JRE image, so reuse the gateway image.
         # The store password is generated HERE, kept only in the tmpfs /stores
         # emptyDir (never in git / a Secret / Vault), and emitted into a Spring
         # properties file the app loads via SPRING_CONFIG_ADDITIONAL_LOCATION.
         - name: build-keystore
-          image: "snapdragon-systems/gateway:dev"
+          image: "hugmesh-systems/gateway:dev"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -72,11 +72,11 @@ spec:
               P="$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-24)"
               # mTLS identity: key + cert -> PKCS12 (Spring reads PKCS12 natively)
               openssl pkcs12 -export -inkey /pki/tls.key -in /pki/tls.crt \
-                -certfile /pki/ca.crt -name snapdragon-be-gateway \
+                -certfile /pki/ca.crt -name hugmesh-be-gateway \
                 -out /stores/keystore.p12 -passout "pass:${P}"
               # NARROW trust tier (default): only the issuing domain CA — per-brand
               # isolation at the mTLS trust anchor.
-              keytool -importcert -noprompt -alias "snapdragon-cluster-ca" \
+              keytool -importcert -noprompt -alias "hugmesh-cluster-ca" \
                 -file /pki/ca.crt -keystore /stores/truststore.p12 \
                 -storetype PKCS12 -storepass "${P}"
               # Spring SSL config — picked up from file:/stores/ (added to
@@ -84,12 +84,12 @@ spec:
               # keystore.serverTls so probes/Service stay plaintext by default.
               umask 077
               cat > /stores/application-tls.properties <<EOF
-              snapdragon.tls.key-store=/stores/keystore.p12
-              snapdragon.tls.key-store-type=PKCS12
-              snapdragon.tls.key-store-password=${P}
-              snapdragon.tls.trust-store=/stores/truststore.p12
-              snapdragon.tls.trust-store-type=PKCS12
-              snapdragon.tls.trust-store-password=${P}
+              hugmesh.tls.key-store=/stores/keystore.p12
+              hugmesh.tls.key-store-type=PKCS12
+              hugmesh.tls.key-store-password=${P}
+              hugmesh.tls.trust-store=/stores/truststore.p12
+              hugmesh.tls.trust-store-type=PKCS12
+              hugmesh.tls.trust-store-password=${P}
               server.ssl.enabled=false
               server.ssl.key-store=/stores/keystore.p12
               server.ssl.key-store-type=PKCS12
@@ -104,7 +104,7 @@ spec:
             - { name: stores, mountPath: /stores }
       containers:
         - name: gateway
-          image: "snapdragon-systems/gateway:dev"
+          image: "hugmesh-systems/gateway:dev"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -117,7 +117,7 @@ spec:
               containerPort: 8080
           env:
             - name: SPRING_APPLICATION_NAME
-              value: "snapdragon-be-gateway"
+              value: "hugmesh-be-gateway"
             - name: PORT
               value: "8080"
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
@@ -129,8 +129,8 @@ spec:
             # application-routes.yml is a profile-specific document, so it would
             # otherwise silently never load, leaving only the packaged
             # application.yml's api-default fallback route active. Same root
-            # cause + fix as the source chart (snapdragon-generator
-            # specs/cluster/charts/snapdragon-gateway/templates/deployment.yaml)
+            # cause + fix as the source chart (hugmesh-generator
+            # specs/cluster/charts/hugmesh-gateway/templates/deployment.yaml)
             # and compose.local.yaml (generator#261).
             #
             # This dark copy was rendered 2026-06-23, BEFORE the source chart
@@ -140,11 +140,11 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: "routes"
             - name: CASDOOR_ISSUER_URI
-              value: "https://id.snapdragon.systems"
+              value: "https://id.hugmesh.systems"
             - name: CASDOOR_JWKS_URI
-              value: "http://casdoor.snapdragon-pki.svc.cluster.local:8000/.well-known/jwks"
+              value: "http://casdoor.hugmesh-pki.svc.cluster.local:8000/.well-known/jwks"
             - name: CASSANDRA_CONTACT_POINTS
-              value: "cassandra.snapdragon-pki.svc.cluster.local:9042"
+              value: "cassandra.hugmesh-pki.svc.cluster.local:9042"
             - name: CASSANDRA_KEYSPACE
               value: "snapdragon_gateway"
             - name: CASSANDRA_LOCAL_DC
@@ -155,8 +155,8 @@ spec:
                   key: password
                   name: route-access-be-gateway
             - name: ROUTE_ACCESS_R2DBC_URL
-              value: r2dbc:postgresql://be_gateway:$(ROUTE_ACCESS_DB_PASSWORD)@route-access-db.snapdragon-pki.svc.cluster.local:5432/gateway
-            - name: SNAPDRAGON_GATEWAY_MTLS_ENABLED
+              value: r2dbc:postgresql://be_gateway:$(ROUTE_ACCESS_DB_PASSWORD)@route-access-db.hugmesh-pki.svc.cluster.local:5432/gateway
+            - name: HUGMESH_GATEWAY_MTLS_ENABLED
               value: "true"
           readinessProbe:
             httpGet: { path: /actuator/health/readiness, port: http }
@@ -185,13 +185,13 @@ spec:
       volumes:
         - name: routes
           configMap:
-            name: snapdragon-be-gateway-routes
+            name: hugmesh-be-gateway-routes
         - name: tmp
           emptyDir: {}
         # Vault-PKI-issued mTLS material, synced by ESO (kubernetes.io/tls).
         - name: pki
           secret:
-            secretName: snapdragon-be-gateway-mtls
+            secretName: hugmesh-be-gateway-mtls
         # tmpfs for the assembled PKCS12 stores + the pod-local SSL properties.
         - name: stores
           emptyDir:

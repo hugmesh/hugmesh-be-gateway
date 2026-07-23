@@ -5,10 +5,10 @@
   <!-- NOTE: this route mirrors the static route defined in application-be.yml
        (spring.cloud.gateway.server.webflux.routes[id=be-default], per SCG 5.0).
        Keep both definitions in sync if the URI/predicate ever changes. -->
-  <changeSet id="seed-be-routes" author="snapdragon">
+  <changeSet id="seed-be-routes" author="hugmesh">
     <insert tableName="gateway_routes">
       <column name="route_id" value="be-default"/>
-      <column name="uri" value="http://snapdragon-api.snapdragon-backend.svc.cluster.local:8080"/>
+      <column name="uri" value="http://hugmesh-api.hugmesh-backend.svc.cluster.local:8080"/>
       <column name="predicates" value="Path=/**"/>
     </insert>
   </changeSet>

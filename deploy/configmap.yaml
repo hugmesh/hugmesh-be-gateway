@@ -1,8 +1,8 @@
-# RENDERED from snapdragon-generator specs/cluster/charts/snapdragon-gateway
+# RENDERED from hugmesh-generator specs/cluster/charts/hugmesh-gateway
 # (templates/configmap.yaml) with the be-gateway routes from apps/20-gateway-be.yaml.
 # The gateway loads this application-routes.yml via SPRING_CONFIG_ADDITIONAL_LOCATION
 # (file:/config/). The Deployment mounts THIS ConfigMap (by fixed name) at /config.
-# Kept verbatim — Forgejo-cutover dark copy; see ../snapdragon-deploy.yaml.
+# Kept verbatim — Forgejo-cutover dark copy; see ../hugmesh-deploy.yaml.
 #
 # TODO: this route table (no bare Path=/** entry) diverges from this repo's own
 # application-be.yml (a single Path=/** catch-all). Verified byte-identical to
@@ -11,13 +11,13 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: snapdragon-be-gateway-routes
+  name: hugmesh-be-gateway-routes
   labels:
-    app.kubernetes.io/name: snapdragon-be-gateway
-    app.kubernetes.io/instance: snapdragon-be-gateway
-    app.kubernetes.io/part-of: snapdragon.systems
+    app.kubernetes.io/name: hugmesh-be-gateway
+    app.kubernetes.io/instance: hugmesh-be-gateway
+    app.kubernetes.io/part-of: hugmesh.systems
     app.kubernetes.io/component: gateway
-    helm.sh/chart: snapdragon-gateway-0.1.0
+    helm.sh/chart: hugmesh-gateway-0.1.0
 data:
   # Loaded via SPRING_CONFIG_ADDITIONAL_LOCATION; merges over the image's
   # baked-in application.yml. Defines this gateway's downstream routes.
@@ -33,49 +33,49 @@ data:
             webflux:
               routes:
                 - id: headscale-forward
-                  uri: http://snapdragon-pki-gateway.snapdragon-pki.svc.cluster.local:8080
+                  uri: http://hugmesh-pki-gateway.hugmesh-pki.svc.cluster.local:8080
                   predicates:
-                    - Host=scale.snapdragon.systems
+                    - Host=scale.hugmesh.systems
                 - id: mastodon-oauth
-                  uri: https://akkoma-proxy.snapdragon-backend.svc.cluster.local:4443
+                  uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=mastodon.snapdragon.systems
+                    - Host=mastodon.hugmesh.systems
                     - Path=/oauth/**
                 - id: mastodon-api
-                  uri: https://akkoma-proxy.snapdragon-backend.svc.cluster.local:4443
+                  uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=mastodon.snapdragon.systems
+                    - Host=mastodon.hugmesh.systems
                     - Path=/api/v1/**
                 - id: mastodon-web
-                  uri: https://akkoma-proxy.snapdragon-backend.svc.cluster.local:4443
+                  uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=mastodon.snapdragon.systems
+                    - Host=mastodon.hugmesh.systems
                 - id: matrix-api
-                  uri: https://tuwunel-proxy.snapdragon-backend.svc.cluster.local:4443
+                  uri: https://tuwunel-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=matrix.snapdragon.systems
+                    - Host=matrix.hugmesh.systems
                     - Path=/_matrix/**
                 - id: matrix-wellknown
-                  uri: https://tuwunel-proxy.snapdragon-backend.svc.cluster.local:4443
+                  uri: https://tuwunel-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
                     - Path=/_matrix/**
                 - id: matrix
-                  uri: https://tuwunel-proxy.snapdragon-backend.svc.cluster.local:4443
+                  uri: https://tuwunel-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=matrix.snapdragon.systems
+                    - Host=matrix.hugmesh.systems
                 - id: games
-                  uri: http://snapdragon-games.snapdragon-games.svc.cluster.local:8080
+                  uri: http://hugmesh-games.hugmesh-games.svc.cluster.local:8080
                   predicates:
-                    - Host=games.snapdragon.systems
+                    - Host=games.hugmesh.systems
                 - id: games-servers-console
-                  uri: http://games-instances-console.snapdragon-games-instances.svc.cluster.local:8080
+                  uri: http://games-instances-console.hugmesh-games-instances.svc.cluster.local:8080
                   predicates:
                     - Path=/games/servers/**
                 - id: federation-api
-                  uri: https://snapdragon-federation-api.snapdragon-backend.svc.cluster.local:8080
+                  uri: https://hugmesh-federation-api.hugmesh-backend.svc.cluster.local:8080
                   predicates:
                     - Path=/api/federation/**
-                - id: snapdragon-api
-                  uri: https://snapdragon-api.snapdragon-backend.svc.cluster.local:8080
+                - id: hugmesh-api
+                  uri: https://hugmesh-api.hugmesh-backend.svc.cluster.local:8080
                   predicates:
                     - Path=/api/**
