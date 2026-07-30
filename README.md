@@ -296,6 +296,35 @@ anonymous traffic.
 > `spring.application.name=hugmesh-be-gateway` are seeded and managed
 > exclusively by `hugmesh-admin-bff-api`, not here.
 
+### MFA-required route enforcement (✅ inherited, ships dark)
+
+> Status: ✅ shipped + tested in the shared gateway image; **feature-flagged dark
+> (default off)**, not absent. `gateway_route_access` carries an `mfa_required`
+> column, and a deciding grant on a row with `mfa_required=true` additionally
+> demands the `MFA_SATISFIED` marker — absent marker means **denied**
+> (fail-closed). The D8 privileged-MFA floor sits *above* the `SUPERADMIN`
+> cross-domain bypass and the `ADMIN` / `GAME-MASTER` own-domain bypass, so even a `SUPERADMIN`
+> reaching an `mfa_required` surface without a fresh second factor is denied.
+> Both `app.mfa.enabled` and `app.mfa.enforce-privileged-floor` default `false`
+> (ship-dark) — when off, the `mfa_required` column is inert and the gateway is
+> byte-identical to its pre-MFA behaviour.
+
+`MFA_SATISFIED` is **not** a role and **not** a permission. It is a non-role
+marker authority derived solely from the **BFF-written, freshness-validated
+`mfa_satisfied_at` JWT-Custom claim** (epoch-millis carried as a string, stamped
+by the BFF on a successful MFA challenge). A stamp is fresh iff
+`0 <= now - ts <= app.mfa.freshness-window` (default `600000`, 10 minutes,
+independent of the session TTL); a **future** timestamp is rejected as
+clock-skew/forged-future. Because `MFA_SATISFIED` is a reserved authority prefix,
+a forged `permissions:["MFA_SATISFIED"]` on the token is dropped and can never
+inject the marker, and the missing `ROLE_` prefix means it can never accidentally
+satisfy a `hasRole()` / route-access role check.
+
+No change to this overlay is required: the enforcement lives in the shared
+gateway image's route-access layer, so this be-gateway already carries it. Turning
+it on is a matter of flipping the flags plus the `mfa_required` rows that
+admin-bff manages for `spring.application.name=hugmesh-be-gateway`.
+
 ### Downstream mTLS (gateway → API)
 
 When the backend API enforces mTLS (`server.ssl.client-auth=need`), set
@@ -413,11 +442,13 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 ## Roadmap
 
 > **State convention:** 🚧 **in-flight** = code on an open branch or PR, not yet
-> merged · 🔭 **planned** = design-complete, no code yet. Nothing below is shipped
-> on `main`. All items below are **upstream / inherited** changes — none are
-> expected to require edits to the files in this overlay repo, but each will affect
-> how this be-gateway behaves once the base `hugmesh-gateway` image (pinned by
-> `GATEWAY_IMAGE`) picks them up.
+> merged · 🔭 **planned** = design-complete, no code yet. Nothing below is fully
+> shipped **and enabled**; where a bullet's upstream half has already landed in the
+> base image (and merely ships dark behind a flag), it says so explicitly and links
+> to the section above that documents it. All items below are **upstream /
+> inherited** changes — none are expected to require edits to the files in this
+> overlay repo, but each will affect how this be-gateway behaves once the base
+> `hugmesh-gateway` image (pinned by `GATEWAY_IMAGE`) picks them up.
 
 - 🚧 **SSO end-to-end + e2e.** The native-login model (each service's own login-ui
   posts a login form directly to that service's own BFF; Casdoor is internal-only
@@ -426,12 +457,18 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   user-bff still custody-JWTs the result into an opaque `bff_` browser session,
   swapped to the internal JWT by the shared pre-security gateway filter. This
   be-gateway inherits the `bff_`→JWT swap from the base image; no local change here.
-- 🚧 **MFA-gated routes (Casdoor MFA).** A base-gateway capability: a new
-  `gateway_route_access.mfa_required` column, plus `amr`/`acr` → `MFA_SATISFIED`
-  authority mapping with **fail-closed** enforcement. Once shipped upstream, the
-  be-gateway will inherit `mfa_required` checks on its backend routes automatically.
-  No change to this repo is required — the effect is entirely in the
-  `gateway_route_access` rows managed by admin-bff for `hugmesh-be-gateway`.
+- 🚧 **MFA enrollment / step-up (Casdoor MFA).** The **gateway leg is already
+  shipped** upstream and inherited here — see
+  ["MFA-required route enforcement"](#mfa-required-route-enforcement--inherited-ships-dark)
+  above for the `gateway_route_access.mfa_required` column, the `MFA_SATISFIED`
+  marker derived from the BFF-written `mfa_satisfied_at` claim, and the
+  privileged-MFA floor. What is still in flight is the platform-wide half: MFA
+  enrollment and step-up (WebAuthn + TOTP + recovery, per-role defaults) in the
+  BFFs that write the `mfa_satisfied_at` stamp, the admin-bff-managed
+  `mfa_required` rows, and flipping `app.mfa.enabled` /
+  `app.mfa.enforce-privileged-floor` from their dark defaults. No change to this
+  repo is required — the effect is entirely in the `gateway_route_access` rows
+  managed by admin-bff for `hugmesh-be-gateway`.
 - 🚧 **New backend API surfaces behind `Path=/**`.** Notifications external channels
   (Matrix DM / Akkoma feed / phpBB / email adapters) and the Workload Console
   (admin-bff changelog 110-band) add new API endpoints that the catch-all route
