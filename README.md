@@ -63,10 +63,16 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   `deploy/` content still ships dark (see below) so the rename has no live effect
   yet.
 - **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.2** ecosystem
-  baseline (on Java 25) through the inherited `hugmesh-gateway` image (shared
-  `hugmesh-parent` 2.7.0 metapom + `hugmesh-commons` 2.7.0 security/tenancy). This overlay
-  carries no Java of its own, so it inherits the baseline transparently on the next
-  build of the pinned `GATEWAY_IMAGE`.
+  baseline (on Java 25) through the inherited `hugmesh-gateway` image. That image
+  deliberately **keeps `spring-boot-starter-parent`, not the `hugmesh-parent`
+  metapom** (which is BFF-focused and would drag in Liquibase / testcontainers-
+  postgres / r2dbc-postgres scaffolding the gateway's Cassandra-based suite
+  doesn't use), and pins `hugmesh-commons` as a **direct dependency at 2.1.0**
+  for its security/tenancy types — not 2.7.0, which is `hugmesh-parent`'s own
+  version and was never a published commons coordinate (same mixup already
+  fixed in hugmesh-auth-core's README, PR #24). This overlay carries no Java of
+  its own, so it inherits the baseline transparently on the next build of the
+  pinned `GATEWAY_IMAGE`.
 - **SCG 5.0 route namespace — fixed & shipped on `main`.** Spring Cloud Gateway 5.0
   (Boot 4) moved route config from `spring.cloud.gateway.routes` to
   `spring.cloud.gateway.server.webflux.routes`; the legacy prefix silently binds
