@@ -1,7 +1,7 @@
 # hugmesh-be-gateway
 
 The **backend front door** of a HugMesh brand: a per-brand deployment of the
-shared [hugmesh-gateway](https://github.com/hugmesh-net/hugmesh-gateway)
+shared [hugmesh-gateway](https://github.com/hugmesh/hugmesh-gateway)
 Spring Cloud Gateway, placed in the **backend tier** to sit in front of the
 backend API and the social homeservers (Matrix / Mastodon).
 
@@ -172,7 +172,7 @@ CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this rep
 
 > **Reference summary only — not local behavior.** Everything in this section is
 > owned by and **authoritative in**
-> [`hugmesh-gateway`](https://github.com/hugmesh-net/hugmesh-gateway),
+> [`hugmesh-gateway`](https://github.com/hugmesh/hugmesh-gateway),
 > not in this repo. This overlay contributes only `application-be.yml` plus the
 > `gateway_routes` seed (see [What's in this repo](#whats-in-this-repo)). Treat
 > the descriptions below as a convenience digest; if they drift from the base
