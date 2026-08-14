@@ -5,7 +5,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${CASDOOR_ISSUER_URI:https://id.hugmesh.systems}
+          issuer-uri: ${CASDOOR_ISSUER_URI:https://id.hugmesh.net}
   cloud:
     gateway:
       # SCG 5.0 (Spring Boot 4) moved route config to

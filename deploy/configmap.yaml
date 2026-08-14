@@ -15,7 +15,7 @@ metadata:
   labels:
     app.kubernetes.io/name: hugmesh-be-gateway
     app.kubernetes.io/instance: hugmesh-be-gateway
-    app.kubernetes.io/part-of: hugmesh.systems
+    app.kubernetes.io/part-of: hugmesh.net
     app.kubernetes.io/component: gateway
     helm.sh/chart: hugmesh-gateway-0.1.0
 data:
@@ -35,25 +35,25 @@ data:
                 - id: headscale-forward
                   uri: http://hugmesh-pki-gateway.hugmesh-pki.svc.cluster.local:8080
                   predicates:
-                    - Host=scale.hugmesh.systems
+                    - Host=scale.hugmesh.net
                 - id: mastodon-oauth
                   uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=mastodon.hugmesh.systems
+                    - Host=mastodon.hugmesh.net
                     - Path=/oauth/**
                 - id: mastodon-api
                   uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=mastodon.hugmesh.systems
+                    - Host=mastodon.hugmesh.net
                     - Path=/api/v1/**
                 - id: mastodon-web
                   uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=mastodon.hugmesh.systems
+                    - Host=mastodon.hugmesh.net
                 - id: matrix-api
                   uri: https://tuwunel-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=matrix.hugmesh.systems
+                    - Host=matrix.hugmesh.net
                     - Path=/_matrix/**
                 - id: matrix-wellknown
                   uri: https://tuwunel-proxy.hugmesh-backend.svc.cluster.local:4443
@@ -62,11 +62,11 @@ data:
                 - id: matrix
                   uri: https://tuwunel-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:
-                    - Host=matrix.hugmesh.systems
+                    - Host=matrix.hugmesh.net
                 - id: games
                   uri: http://hugmesh-games.hugmesh-games.svc.cluster.local:8080
                   predicates:
-                    - Host=games.hugmesh.systems
+                    - Host=games.hugmesh.net
                 - id: games-servers-console
                   uri: http://games-instances-console.hugmesh-games-instances.svc.cluster.local:8080
                   predicates:

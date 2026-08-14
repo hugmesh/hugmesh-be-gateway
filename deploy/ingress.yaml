@@ -1,7 +1,7 @@
 # RENDERED from hugmesh-generator specs/cluster/charts/hugmesh-gateway
 # (templates/service.yaml ingress block) with the be-gateway ingress values from
-# apps/20-gateway-be.yaml (className nginx, host api.hugmesh.systems, extraHosts
-# scale./games.hugmesh.systems). The in-cluster nginx Ingress is the SECONDARY
+# apps/20-gateway-be.yaml (className nginx, host api.hugmesh.net, extraHosts
+# scale./games.hugmesh.net). The in-cluster nginx Ingress is the SECONDARY
 # path; Cloudflare Tunnel (manifests/cloudflared) is the primary external edge.
 # Kept verbatim — Forgejo-cutover dark copy; see ../hugmesh-deploy.yaml.
 apiVersion: networking.k8s.io/v1
@@ -11,13 +11,13 @@ metadata:
   labels:
     app.kubernetes.io/name: hugmesh-be-gateway
     app.kubernetes.io/instance: hugmesh-be-gateway
-    app.kubernetes.io/part-of: hugmesh.systems
+    app.kubernetes.io/part-of: hugmesh.net
     app.kubernetes.io/component: gateway
     helm.sh/chart: hugmesh-gateway-0.1.0
 spec:
   ingressClassName: nginx
   rules:
-    - host: "api.hugmesh.systems"
+    - host: "api.hugmesh.net"
       http:
         paths:
           - path: /
@@ -27,7 +27,7 @@ spec:
                 name: hugmesh-be-gateway
                 port:
                   number: 8080
-    - host: "scale.hugmesh.systems"
+    - host: "scale.hugmesh.net"
       http:
         paths:
           - path: /
@@ -37,7 +37,7 @@ spec:
                 name: hugmesh-be-gateway
                 port:
                   number: 8080
-    - host: "games.hugmesh.systems"
+    - host: "games.hugmesh.net"
       http:
         paths:
           - path: /

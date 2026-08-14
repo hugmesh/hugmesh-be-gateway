@@ -56,8 +56,8 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   until the Forgejo cutover.
 - **Rebrand — Snapdragon → HugMesh (PR #18, 2026-07-22).** Image name,
   `SPRING_APPLICATION_NAME`, k8s resource names/labels, the `hugmesh-backend`
-  namespace literal, and domain-derived config defaults (`id.hugmesh.systems`
-  issuer, `api./scale./games.hugmesh.systems` ingress hosts) are renamed. The
+  namespace literal, and domain-derived config defaults (`id.hugmesh.net`
+  issuer, `api./scale./games.hugmesh.net` ingress hosts) are renamed. The
   Cassandra keyspace literal `snapdragon_gateway` in `deploy/deployment.yaml` was
   deliberately left unchanged pending a real keyspace migration, and all of this
   `deploy/` content still ships dark (see below) so the rename has no live effect
@@ -190,7 +190,7 @@ the backend front door are described below.
 ### Casdoor resource server + role authorities
 
 Every request must carry a valid internal Casdoor JWT (issuer `CASDOOR_ISSUER_URI`,
-default `https://id.hugmesh.systems`). The shared `CasdoorAuthorities` converter
+default `https://id.hugmesh.net`). The shared `CasdoorAuthorities` converter
 maps the JWT claims to Spring Security authorities as follows:
 
 - Every authenticated principal receives a `ROLE_USER` floor authority.
@@ -351,7 +351,7 @@ base-gateway variables is documented in `hugmesh-gateway`.
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `SPRING_APPLICATION_NAME` | `hugmesh-be-gateway` | gateway identity + route-access `gateway` key (baked into the image) |
-| `CASDOOR_ISSUER_URI` | `https://id.hugmesh.systems` | trusted Casdoor issuer for JWT validation |
+| `CASDOOR_ISSUER_URI` | `https://id.hugmesh.net` | trusted Casdoor issuer for JWT validation |
 | `DOWNSTREAM_URI` | `http://hugmesh-api.hugmesh-backend.svc.cluster.local:8080` | the API this gateway fronts |
 | `APP_TENANCY_ISSUERS` | _(empty)_ | CSV `issuerUri=domain,…` — enables multi-brand mode (empty ⇒ single-tenant `default`) |
 | `APP_TENANCY_HOSTS` | _(empty)_ | CSV `hostSuffix=domain,…` — defense-in-depth Host→domain map |
@@ -376,7 +376,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 - **Gateways** — one shared `hugmesh-gateway` image powers every gateway in the
   platform. This overlay is the backend instance. The `fe-gateway` and identity
   gateways (`pki-gateway`, `id-gateway`) are siblings built the same way. The
-  optional `games.hugmesh.systems` surface is **not** a separate games-specific
+  optional `games.hugmesh.net` surface is **not** a separate games-specific
   gateway sibling — per `deploy/ingress.yaml` + `deploy/configmap.yaml`, this
   be-gateway instance fronts it directly (its own route table carries the
   `games` and `games-servers-console` routes) when the opt-in games service is
@@ -416,7 +416,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
      fe,pki}.yaml`) set `path: specs/cluster/charts/hugmesh-gateway` — they
      deploy the **chart**, not this repo — and none overrides the image, so all
      three run the chart default
-     `registry.hugmesh.systems/hugmesh/hugmesh-gateway` (the shared
+     `registry.hugmesh.net/hugmesh/hugmesh-gateway` (the shared
      **base** image).
   2. `GATEWAY_IMAGE` — this repo's only build-arg seam — appears **nowhere** in
      `hugmesh-generator`.
@@ -438,7 +438,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   `deploy/deployment.yaml` and `deploy/kustomization.yaml` pin
   `hugmesh-systems/gateway:dev` and describe it as the chart default, but the
   chart's current `values.yaml` says
-  `registry.hugmesh.systems/hugmesh/hugmesh-gateway:dev`. Both files
+  `registry.hugmesh.net/hugmesh/hugmesh-gateway:dev`. Both files
   claim to reproduce the live Helm render 1:1; on image coords they no longer do.
   Same 2026-06-23 staleness root cause as the route-table divergence above — fold
   it into the same re-sync rather than patching piecemeal.

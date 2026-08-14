@@ -16,7 +16,7 @@ metadata:
   labels:
     app.kubernetes.io/name: hugmesh-be-gateway
     app.kubernetes.io/instance: hugmesh-be-gateway
-    app.kubernetes.io/part-of: hugmesh.systems
+    app.kubernetes.io/part-of: hugmesh.net
     app.kubernetes.io/component: gateway
     helm.sh/chart: hugmesh-gateway-0.1.0
 spec:
@@ -48,7 +48,7 @@ spec:
           type: container_t
           level: "s0:c12"
       nodeSelector:
-        hugmesh.systems/backend: "true"
+        hugmesh.net/backend: "true"
       initContainers:
         # Build the PKCS12 keystore (mTLS identity) + JRE truststore from the
         # Vault-PKI-issued, ESO-synced PEM Secret
@@ -140,7 +140,7 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: "routes"
             - name: CASDOOR_ISSUER_URI
-              value: "https://id.hugmesh.systems"
+              value: "https://id.hugmesh.net"
             - name: CASDOOR_JWKS_URI
               value: "http://casdoor.hugmesh-pki.svc.cluster.local:8000/.well-known/jwks"
             - name: CASSANDRA_CONTACT_POINTS

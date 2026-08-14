@@ -13,7 +13,7 @@ resources:
   - ingress.yaml
 # ── IMAGE / REGISTRY (intentional fidelity note) ─────────────────────────────
 # The kustomize-based services (forum-bff-api, remote-fragment, forum-ui, …) rewrite
-# their first-party image to registry.hugmesh.systems/hugmesh/<repo>:main and
+# their first-party image to registry.hugmesh.net/hugmesh/<repo>:main and
 # add the gitlab-registry imagePullSecret here. The gateway is DIFFERENT today: it
 # deploys from the hugmesh-gateway Helm CHART with image hugmesh-systems/gateway:dev
 # (chart default), NO registry rewrite and NO imagePullSecret in the live render
@@ -21,12 +21,12 @@ resources:
 # 1:1 we DELIBERATELY mirror that: no images: rewrite, no imagePullSecrets patch.
 #
 # When the source eventually flips to Forgejo, align the gateway image coords with
-# the rest of the fleet (registry.hugmesh.systems/hugmesh/hugmesh-be-gateway
+# the rest of the fleet (registry.hugmesh.net/hugmesh/hugmesh-be-gateway
 # :main + gitlab-registry pull secret) by uncommenting the block below. Left commented
 # so this PR is purely additive/dark and changes nothing about the current deployment.
 #
 # images:
-#   - { name: hugmesh-systems/gateway, newName: registry.hugmesh.systems/hugmesh/hugmesh-be-gateway, newTag: main }
+#   - { name: hugmesh-systems/gateway, newName: registry.hugmesh.net/hugmesh/hugmesh-be-gateway, newTag: main }
 # patches:
 #   - target: { kind: Deployment }
 #     patch: |

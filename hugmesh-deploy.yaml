@@ -25,5 +25,5 @@ replicas: 1
 # not get a route DB row pointing at itself. Its OWN downstream routes live in
 # deploy/configmap.yaml (hugmesh-be-gateway-routes, loaded via
 # SPRING_CONFIG_ADDITIONAL_LOCATION); its external front door is the nginx Ingress in
-# deploy/ingress.yaml (api./scale./games.hugmesh.systems) plus the Cloudflare
+# deploy/ingress.yaml (api./scale./games.hugmesh.net) plus the Cloudflare
 # Tunnel (manifests/cloudflared, the primary edge).
