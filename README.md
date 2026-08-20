@@ -410,8 +410,7 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   federation-api/hugmesh-api only). Confirm which is authoritative today and
   re-verify `deploy/` is still byte-identical to the live render — it was last
   confirmed on 2026-06-23 and hasn't been re-synced since. See **Status** above.
-- **~~TODO: confirm whether this repo's overlay image is consumed anywhere.~~ —
-  ANSWERED 2026-07-17: it is not.** Saying so plainly, as this entry asked.
+- **This repo's overlay image is not consumed anywhere** (confirmed 2026-07-17).
   `.gitlab-ci.yml` builds and pushes this overlay image, but **nothing deploys
   it**. Four independent checks against `hugmesh-generator`'s `origin/main`:
   1. All three gateway ArgoCD Applications (`specs/cluster/apps/20-gateway-{be,
