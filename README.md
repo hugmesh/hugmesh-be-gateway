@@ -54,14 +54,16 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   dark `deploy/deployment.yaml` copy picked up the analogous
   `SPRING_PROFILES_ACTIVE=routes` line in the same PR; that path stays latent
   until the Forgejo cutover.
-- **Rebrand — Snapdragon → HugMesh (PR #18, 2026-07-22).** Image name,
+- **Rebrand to HugMesh (PR #18, 2026-07-22).** Image name,
   `SPRING_APPLICATION_NAME`, k8s resource names/labels, the `hugmesh-backend`
   namespace literal, and domain-derived config defaults (`id.hugmesh.net`
   issuer, `api./scale./games.hugmesh.net` ingress hosts) are renamed. The
-  Cassandra keyspace literal `snapdragon_gateway` in `deploy/deployment.yaml` was
-  deliberately left unchanged pending a real keyspace migration, and all of this
-  `deploy/` content still ships dark (see below) so the rename has no live effect
-  yet.
+  Cassandra keyspace literal in `deploy/deployment.yaml` initially stayed on
+  its pre-rebrand spelling pending a real keyspace migration; it now reads
+  `hugmesh_gateway`. Cassandra cannot rename a keyspace in place, so an
+  existing mesh picking this up must reseed, or copy its data
+  keyspace-to-keyspace, before deploying. All of this `deploy/` content still
+  ships dark (see below) so the rename has no live effect yet.
 - **Baseline:** rides the **Spring Boot 4.0.7 / Spring Cloud 2025.1.2** ecosystem
   baseline (on Java 25) through the inherited `hugmesh-gateway` image. That image
   deliberately **keeps `spring-boot-starter-parent`, not the `hugmesh-parent`

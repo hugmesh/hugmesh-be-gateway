@@ -146,7 +146,7 @@ spec:
             - name: CASSANDRA_CONTACT_POINTS
               value: "cassandra.hugmesh-pki.svc.cluster.local:9042"
             - name: CASSANDRA_KEYSPACE
-              value: "snapdragon_gateway"
+              value: "hugmesh_gateway"
             - name: CASSANDRA_LOCAL_DC
               value: "dc1"
             - name: ROUTE_ACCESS_DB_PASSWORD
