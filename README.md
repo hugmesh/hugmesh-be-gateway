@@ -42,7 +42,7 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
 
 ## Status
 
-- **Last synced:** 2026-07-22
+- **Last synced:** 2026-10-07
 - **Overlay config now actually loads — fixed & shipped on `main` (PR #17,
   2026-07-17).** `application-be.yml` is a profile-specific document
   (`application-{profile}.yml`); `SPRING_CONFIG_ADDITIONAL_LOCATION` only adds a
@@ -70,9 +70,8 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   metapom** (which is BFF-focused and would drag in Liquibase / testcontainers-
   postgres / r2dbc-postgres scaffolding the gateway's Cassandra-based suite
   doesn't use), and pins `hugmesh-commons` as a **direct dependency at 2.1.0**
-  for its security/tenancy types — not 2.7.0, which is `hugmesh-parent`'s own
-  version and was never a published commons coordinate (same mixup already
-  fixed in hugmesh-auth-core's README, PR #24). This overlay carries no Java of
+  for its security/tenancy types. (`hugmesh-parent`'s own version is 2.8.0; that is
+  not a commons version.) This overlay carries no Java of
   its own, so it inherits the baseline transparently on the next build of the
   pinned `GATEWAY_IMAGE`.
 - **SCG 5.0 route namespace — fixed & shipped on `main`.** Spring Cloud Gateway 5.0
@@ -82,15 +81,22 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   under `spring.cloud.gateway.server.webflux.routes`, so the catch-all to the backend
   API is honoured again. (Route-registry seeding via Liquibase into `gateway_routes`
   is unaffected — that path was never namespace-sensitive.)
-- **Auth posture — pure Casdoor-JWT resource server.** The be-gateway validates the
-  **internal Casdoor JWT** and runs the inherited authority/domain/route-access stack;
-  it **exposes no login**. In the current SSO model, browsers hold only an opaque
-  `bff_`-prefixed session and the per-session JWT custody/refresh + the `bff_`→custody-JWT
-  swap live **upstream of this overlay** (login-ui + user-bff + the shared gateway
-  pre-security filter), so nothing in this repo changes for that model.
+- **Auth posture — Casdoor-JWT resource server plus `bff_` session introspection.**
+  The be-gateway validates the **internal Casdoor JWT** and runs the inherited
+  authority/domain/route-access stack; it **exposes no login**. Browsers hold only an
+  opaque `bff_`-prefixed session. The live be-gateway release sets
+  `APP_BFF_SESSION_ENABLED=true` and `BFF_BASE_URL` (admin-bff), so the inherited
+  `BffSessionAuthFilter` introspects a `bff_` token against admin-bff
+  (`/bff/internal/session/introspect`) and builds the security context from the
+  answer. The other bridge, the `bff_`→custody-JWT swap (`BffJwtExchangeWebFilter`),
+  is off by default (`HUGMESH_GATEWAY_BFF_EXCHANGE_ENABLED=false`) and the be-gateway
+  release does not turn it on; the fe-gateway release does. Nothing in this repo
+  changes for either bridge.
 - **Authorization data source.** Route-access rows remain admin-managed in Postgres
   (`gateway_route_access`, source of truth), CRUDed by `hugmesh-admin-bff-api`;
-  this repo only seeds the `be-default` row into the `gateway_routes` **registry**.
+  this repo seeds no route-access rows. It carries a Liquibase seed of the
+  `be-default` row for a `gateway_routes` table, but the base gateway has no
+  Liquibase runner and no code that reads that table (see the file table below).
 - **Forgejo service-catalog deploy descriptor — shipped dark on `main`.** A
   `hugmesh-deploy.yaml` descriptor + a `deploy/` kustomize dir (the gateway Helm
   chart rendered byte-for-byte to static manifests) are on `main` for the Phase-6
@@ -108,18 +114,25 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   mastodon, headscale-forward, federation-api, hugmesh-api) with **no bare
   `Path=/**` entry at all**. `deploy/deployment.yaml` also shows the live pod
   running the **base** `hugmesh-systems/gateway:dev` image directly, not an
-  image built from this repo's `Dockerfile` — so it's unclear from this repo alone
-  whether the overlay image `.gitlab-ci.yml` builds and pushes is consumed by
-  anything today. That snapshot was verified byte-identical on **2026-06-23**
-  (PR #9) and hasn't been re-synced since — treat it as directional, not current
-  truth, until it's re-checked against the live chart. See **Known Gaps** below.
-- **CI:** GitLab (in-cluster). No GitHub Actions in this repo.
+  image built from this repo's `Dockerfile`. That snapshot was verified
+  byte-identical on **2026-06-23** (PR #9) and has not been re-synced since. It is
+  now stale: the chart's current be-gateway values
+  (`apps/20-gateway-be.yaml` on `hugmesh-generator` `origin/main`, 2026-10-07)
+  carry **14** routes — the same 11 plus `edge-ai-analysis`, `edge-ai-tts` and
+  `edge-ai` on `ai.hugmesh.net` — and still no bare `Path=/**`. Treat `deploy/` as
+  directional, not current truth. See **Known Gaps** below.
+- **CI:** GitLab (in-cluster) builds and pushes the overlay image
+  (`.gitlab-ci.yml`). GitHub Actions has one **manual-only** workflow,
+  `.github/workflows/release.yml` (`workflow_dispatch`, added 2026-10-07 in PR #4):
+  it builds the same image off `ghcr.io/hugmesh/hugmesh-gateway:latest` (input
+  `gateway_image`) and pushes `ghcr.io/hugmesh/hugmesh-be-gateway:<tag>` and
+  `:<commit sha>`. It has no push or tag trigger.
 
 ```mermaid
 flowchart TB
     subgraph repo["This repo — overlay-image build path"]
         appyml["application-be.yml\n(single Path=/** route)"]
-        liq["liquibase seed\n(gateway_routes: be-default)"]
+        liq["liquibase seed\n(gateway_routes: be-default)\nnot read by the base image"]
         ci["Dockerfile + .gitlab-ci.yml\nbuild + push the overlay image"]
     end
 
@@ -150,7 +163,7 @@ flowchart TB
 
 A brand typically runs several gateway instances off this one shared image —
 `hugmesh-be-gateway` (backend), `hugmesh-fe-gateway` (front door),
-`hugmesh-pki-gateway` / `hugmesh-id-gateway` (identity), etc. — each
+`hugmesh-pki-gateway` (identity), `hugmesh-superadmin-gateway` (tailnet-only), etc. — each
 differentiated only by its `SPRING_APPLICATION_NAME`, route set, and
 route-access rows. This repo is the backend instance.
 
@@ -160,13 +173,14 @@ route-access rows. This repo is the backend instance.
 |------|---------|
 | `Dockerfile` | `FROM ${GATEWAY_IMAGE}` then bakes the be identity + config + Liquibase changelog onto the shared image |
 | `application-be.yml` | overlay config: `application.name`, the Casdoor `issuer-uri`, and the single `be-default` `Path=/**` route to the API, declared under `spring.cloud.gateway.server.webflux.routes` (SCG 5.0 / Boot 4 namespace; loaded via `SPRING_CONFIG_ADDITIONAL_LOCATION`) |
-| `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog** — the entry point the base gateway image runs; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`) |
-| `liquibase/changelog/001-gateway-routes.xml` | seeds the `be-default` route (`Path=/**` → API) into the DB-backed route **registry** (`gateway_routes`) |
+| `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog**; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`). The `Dockerfile` copies it to `/app/liquibase/changelog`, but `hugmesh-gateway` has no Liquibase dependency (`pom.xml`) and nothing in it runs this changelog |
+| `liquibase/changelog/001-gateway-routes.xml` | inserts the `be-default` route (`Path=/**` → API) into a `gateway_routes` table. The base gateway reads no such table: its route registry is the Cassandra `url_registry` table (`UrlRegistryRouteDefinitionLocator`), and `SecurityConfig.java` says "nothing in this gateway loads that table" |
 | `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `hugmesh-gateway` image in the same in-cluster GitLab registry namespace |
+| `.github/workflows/release.yml` | manual-only (`workflow_dispatch`) GHCR release: the same build, pushed to `ghcr.io/hugmesh/hugmesh-be-gateway` |
 | `hugmesh-deploy.yaml` | per-repo deploy descriptor for the Phase-6 Forgejo **service-catalog** ApplicationSet (name/namespace/image/port). **Ships dark:** the live ArgoCD source today is the `hugmesh-gateway` Helm chart in `hugmesh-generator`, so this descriptor + `deploy/` change nothing running until the Forgejo cutover |
 | `deploy/` | the gateway Helm chart **rendered to static kustomize manifests** (`serviceaccount`/`configmap`/`service`/`deployment`/`ingress` + `kustomization.yaml`) — a verbatim, byte-identical dark copy of today's live render, kept for the Forgejo-source cutover; not consulted by the current GitHub-rooted ArgoCD |
 
-CI is **GitLab** (in-cluster). There are no GitHub Actions workflows in this repo.
+CI is **GitLab** (in-cluster). The one GitHub Actions workflow is the manual GHCR release above.
 
 ---
 
@@ -199,22 +213,22 @@ maps the JWT claims to Spring Security authorities as follows:
 - The `roles` claim is mapped to `ROLE_<UPPER>` (handles Casdoor's string-or-object
   role representation).
 - The `permissions` claim is mapped verbatim, **except** any entry starting with
-  a reserved prefix (`ROLE_` or `DOMAIN_`) is dropped — this prevents
+  a reserved prefix (`ROLE_`, `DOMAIN_` or `MFA_SATISFIED`) is dropped — this prevents
   authority-injection via a crafted token.
 - The legacy `isAdmin: true` claim maps to `ROLE_ADMIN`.
 - Exactly one `DOMAIN_<x>` authority is derived from the cryptographically-validated
   `iss` field (never from a user-settable claim), binding the principal to a brand.
 
-The least-privilege cascade is `SUPERADMIN > ADMIN / MOD > USER` (where `MOD` and
-`ADMIN` are siblings, neither subordinate to the other), plus the orthogonal
-`ROLE_IMAGE_BUILDER` capability.
+The role hierarchy bean (`SecurityConfig.roleHierarchy()`) puts `SUPERADMIN` above
+`ADMIN`, `MOD` and `USER`; `MOD` and `ADMIN` are siblings, neither subordinate to
+the other. `IMAGE_BUILDER` is a separate role outside that hierarchy.
 
 The browser-facing native-login model (a login form served directly by each
 service's own login-ui, POSTing to that service's own BFF login endpoint; Casdoor
 is internal-only and never redirects the browser, plus the resulting per-session
 JWT custody/refresh and the opaque `bff_`→internal-JWT swap performed by a shared
-pre-security gateway filter) is owned upstream; from this overlay's perspective the
-request that reaches it already carries a validated internal Casdoor JWT.
+pre-security gateway filter) is owned upstream. The be-gateway sees either a validated internal Casdoor JWT
+or a `bff_` token it introspects itself (see **Status**, "Auth posture").
 
 ### Domain scoping (multi-tenancy)
 
@@ -228,8 +242,9 @@ feature is **opt-in and backward-compatible**:
   rather than being silently accepted.
 
 After JWT validation, `GatewayRouteAccessFilter` **hard-denies** any
-non-`SUPERADMIN` principal whose `DOMAIN_<x>` authority does not match the target
-domain derived from the `Host` header. This cross-tenant check fires before the
+non-`SUPERADMIN` JWT principal whose domain does not match the target
+domain derived from the `Host` header. The principal's domain comes from the
+validated issuer, not from the authorities list. This cross-tenant check fires before the
 URL-grant layer is consulted, so a legitimately-authenticated user from brand A
 can never reach brand B's resources. `ROLE_SUPERADMIN` is the **only** cross-domain
 bypass — it exists solely for the infrastructure control plane.
@@ -259,25 +274,25 @@ flowchart TB
 ### Authorization filter chain
 
 After Spring Security validates the JWT, the shared `WebFilter` chain runs in
-priority order. Filters are listed below as they apply to this repo's own
-`Path=/**` overlay route (see the **Status** section's "two different route
-tables" note — the live cluster's actual route set is broader and externally
-sourced, so treat "this gateway's route" below as this repo's contribution,
-not necessarily the pod's full live route table):
+priority order. The orders below are the values in `hugmesh-gateway` `origin/main`
+(2026-10-07). The three `bff_` bridge filters run before these, ahead of Spring
+Security. See the **Status** section's "two different route tables" note: the
+live cluster's route set is broader than this repo's route.
 
 | Order | Filter | Role in front of the API |
 |------:|--------|--------------------------|
-| +100 | `RevocationGatewayFilter` | Rejects tokens that Casdoor has revoked (checked against a Cassandra-backed cache). |
-| +200 | `ExternalAuthHeaderFilter` | Injects additive `External-Authorization` headers when an external OAuth token accompanies the request. This header is never required by the backend API. |
-| +250 | `GatewayRouteAccessFilter` | Enforces per-gateway URL-access rules and the cross-domain hard-deny / `SUPERADMIN` bypass described above. |
-| +300 | `ResourceAccessFilter` | Enforces per-resource grants. **This filter is inert for this gateway's catch-all route** — it gates specific path patterns on other sibling gateways, not the `Path=/**` API front door here. |
+| 10 | `RevocationGatewayFilter` | Rejects tokens that Casdoor has revoked (403, checked against a Cassandra-backed cache). Until the cache has loaded once, it answers 503 for authenticated requests (`app.revocation.fail-closed-until-primed`, default `true`). |
+| 11 | `HomeserverTokenRevocationFilter` | Denies revoked opaque Matrix / Mastodon bearer tokens (see below). |
+| 20 | `ExternalAuthHeaderFilter` | Injects additive `External-Authorization` headers when an external OAuth token accompanies the request. This header is never required by the backend API. |
+| 25 | `GatewayRouteAccessFilter` | Enforces per-gateway URL-access rules and the cross-domain hard-deny / `SUPERADMIN` bypass described above. |
+| 30 | `ResourceAccessFilter` | Enforces per-resource grants, but only on game paths: `/api/games/{slug}`, `/api/assets/levels/{slug}`, `/_remotes/wasm-fragment/{slug}`, `/api/sessions/{id}` and `/api/game/stream`. Every other path passes through. |
 
-`ROLE_ADMIN` bypasses the access filters within its own domain, so the admin
-who manages the route-access rules can never lock themselves out.
+`ROLE_ADMIN` and `ROLE_GAME-MASTER` bypass the route-access rules within their own
+domain, so the admin who manages the rules can never lock themselves out.
 
 Requests that carry an opaque homeserver bearer token instead of a Casdoor JWT
 (Matrix / Mastodon passthrough traffic) are handled separately by the
-`HomeserverTokenRevocationFilter`.
+`HomeserverTokenRevocationFilter` (order 11).
 
 ### Per-gateway route access
 
@@ -290,7 +305,7 @@ read-cache, and refreshes on each tick. The fallback chain is:
 
 1. Postgres (authoritative) — used when reachable.
 2. Cassandra cache — used when Postgres is briefly unavailable.
-3. Baked-in canonical seed — last resort; **never silently fail-open**.
+3. Baked-in canonical seed — used when neither datastore is configured, and until the first load; **never silently fail-open**.
 
 The admin-bff service (`hugmesh-admin-bff-api`) creates and manages the
 canonical `gateway_route_access` rows. Match semantics: longest `url_pattern`
@@ -353,12 +368,17 @@ base-gateway variables is documented in `hugmesh-gateway`.
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `SPRING_APPLICATION_NAME` | `hugmesh-be-gateway` | gateway identity + route-access `gateway` key (baked into the image) |
+| `SPRING_PROFILES_ACTIVE` | `be` | activates `application-be.yml` (baked into the image; setting it replaces the value) |
 | `CASDOOR_ISSUER_URI` | `https://id.hugmesh.net` | trusted Casdoor issuer for JWT validation |
 | `DOWNSTREAM_URI` | `http://hugmesh-api.hugmesh-backend.svc.cluster.local:8080` | the API this gateway fronts |
 | `APP_TENANCY_ISSUERS` | _(empty)_ | CSV `issuerUri=domain,…` — enables multi-brand mode (empty ⇒ single-tenant `default`) |
 | `APP_TENANCY_HOSTS` | _(empty)_ | CSV `hostSuffix=domain,…` — defense-in-depth Host→domain map |
 | `ROUTE_ACCESS_R2DBC_URL` | _(empty)_ | Postgres source-of-truth for route-access rows (empty ⇒ Cassandra-cache/seed only) |
+| `APP_TENANCY_HOSTS_FILE` | _(empty)_ | path to a runtime host→domain file, re-read every 5 s (`APP_TENANCY_HOSTS_FILE_REFRESH_MS`) |
 | `HUGMESH_GATEWAY_MTLS_ENABLED` | `false` | Present a client certificate to the mTLS-enforcing backend API. |
+| `APP_MFA_ENABLED` | `false` | derive `MFA_SATISFIED` and enforce `mfa_required` rows |
+| `APP_MFA_ENFORCE_PRIVILEGED_FLOOR` | `false` | the privileged-MFA floor above the bypasses |
+| `APP_MFA_FRESHNESS_WINDOW` | `600000` | MFA stamp freshness, ms |
 
 **Multi-tenant example** — to trust two brands with separate Casdoor instances:
 
@@ -376,8 +396,9 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
 ## Relationship to the platform
 
 - **Gateways** — one shared `hugmesh-gateway` image powers every gateway in the
-  platform. This overlay is the backend instance. The `fe-gateway` and identity
-  gateways (`pki-gateway`, `id-gateway`) are siblings built the same way. The
+  platform. This overlay is the backend instance. The `fe-gateway`, the identity
+  gateway (`pki-gateway`) and the tailnet-only `superadmin-gateway` are siblings
+  deployed from the same chart. The
   optional `games.hugmesh.net` surface is **not** a separate games-specific
   gateway sibling — per `deploy/ingress.yaml` + `deploy/configmap.yaml`, this
   be-gateway instance fronts it directly (its own route table carries the
@@ -407,26 +428,32 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   pod (per `deploy/configmap.yaml`, a snapshot captured by PR #9) is sourced
   from the `hugmesh-gateway` Helm chart in `hugmesh-generator` instead,
   and has no bare catch-all at all (games/matrix/mastodon/headscale-forward/
-  federation-api/hugmesh-api only). Confirm which is authoritative today and
-  re-verify `deploy/` is still byte-identical to the live render — it was last
+  federation-api/hugmesh-api in the snapshot; the chart now adds three `edge-ai`
+  routes on `ai.hugmesh.net`). Confirm which is authoritative today and
+  re-verify `deploy/` against the live render — it was last
   confirmed on 2026-06-23 and hasn't been re-synced since. See **Status** above.
-- **This repo's overlay image is not consumed anywhere** (confirmed 2026-07-17).
-  `.gitlab-ci.yml` builds and pushes this overlay image, but **nothing deploys
-  it**. Four independent checks against `hugmesh-generator`'s `origin/main`:
-  1. All three gateway ArgoCD Applications (`specs/cluster/apps/20-gateway-{be,
-     fe,pki}.yaml`) set `path: specs/cluster/charts/hugmesh-gateway` — they
+- **This repo's overlay image is not consumed anywhere** (re-confirmed 2026-10-07).
+  `.gitlab-ci.yml` builds and pushes this overlay image, and the manual GitHub
+  workflow can push it to GHCR, but **nothing deploys it**. Four independent
+  checks against `hugmesh-generator`'s `origin/main`:
+  1. All four gateway ArgoCD Applications (`specs/cluster/apps/20-gateway-{be,
+     fe,pki}.yaml` and `22-gateway-superadmin.yaml`) set
+     `path: specs/cluster/charts/hugmesh-gateway` — they
      deploy the **chart**, not this repo — and none overrides the image, so all
-     three run the chart default
+     four run the chart default
      `registry.hugmesh.net/hugmesh/hugmesh-gateway` (the shared
      **base** image).
   2. `GATEWAY_IMAGE` — this repo's only build-arg seam — appears **nowhere** in
      `hugmesh-generator`.
-  3. An org-wide grep for `image:.*hugmesh-(be|fe|pki)-gateway` returns
-     **nothing**.
-  4. `hugmesh-generator`'s only mentions of the string `hugmesh-be-gateway`
-     are non-deploy uses: the OWASP SCA scan matrix, the `route-access` seed SQL
-     (that's `spring.application.name`, not an image), and ArgoCD
-     `releaseName`/`instance.name` values.
+  3. A grep of every `hugmesh-*` repo's `origin/main` for
+     `image:.*hugmesh-(be|fe|pki)-gateway` returns **nothing**. Nor does any repo
+     reference `ghcr.io/hugmesh/hugmesh-be-gateway` except this repo's workflow.
+  4. `hugmesh-generator`'s mentions of the string `hugmesh-be-gateway`
+     are non-deploy uses: the OWASP SCA scan matrix and the catalog clone list in
+     `.gitlab-ci.yml`, the catalog `adopters.yaml`, the `route-access` seed SQL
+     (that's `spring.application.name`, not an image), a dark KEDA ScaledObject,
+     and ArgoCD `releaseName`/`instance.name` values. The local compose stack
+     builds the base `hugmesh-gateway` repo, not this one.
 
   `deploy/deployment.yaml` likewise runs the base image directly. So this repo's
   `Dockerfile` / `application-be.yml` / Liquibase overlay mechanism is **not
@@ -435,12 +462,16 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   route-templating approach and is now vestigial) or an oversight is a product
   decision, not a code fix. Recorded here so nobody assumes `docker build .` of
   this repo produces what actually runs.
-- **`deploy/`'s image coordinates have drifted from the chart.**
+- **`deploy/` has drifted from the chart in more than the routes.**
   `deploy/deployment.yaml` and `deploy/kustomization.yaml` pin
   `hugmesh-systems/gateway:dev` and describe it as the chart default, but the
   chart's current `values.yaml` says
-  `registry.hugmesh.net/hugmesh/hugmesh-gateway:dev`. Both files
-  claim to reproduce the live Helm render 1:1; on image coords they no longer do.
+  `registry.hugmesh.net/hugmesh/hugmesh-gateway:dev`. The chart also now sets
+  `localDc: datacenter1` (the snapshot says `dc1`), a per-instance Cassandra role
+  (`be_gw_cass`), an image pull secret (`harbor-registry`), and the BFF session
+  variables (`APP_BFF_SESSION_ENABLED`, `BFF_BASE_URL`, `INTERNAL_TOKEN`); the
+  snapshot has none of these. Both files
+  claim to reproduce the live Helm render 1:1; they no longer do.
   Same 2026-06-23 staleness root cause as the route-table divergence above — fold
   it into the same re-sync rather than patching piecemeal.
 
@@ -461,9 +492,10 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   posts a login form directly to that service's own BFF; Casdoor is internal-only
   and never redirects the browser) superseded the older Casdoor OIDC/PKCE
   browser-redirect design and is being driven to a live, e2e-tested state upstream.
-  user-bff still custody-JWTs the result into an opaque `bff_` browser session,
-  swapped to the internal JWT by the shared pre-security gateway filter. This
-  be-gateway inherits the `bff_`→JWT swap from the base image; no local change here.
+  user-bff still custody-JWTs the result into an opaque `bff_` browser session.
+  The be-gateway resolves it by introspection today (see **Status**, "Auth
+  posture"); the `bff_`→JWT swap filter is in the base image but off here. No
+  local change in this repo.
 - 🚧 **MFA enrollment / step-up (Casdoor MFA).** The **gateway leg is already
   shipped** upstream and inherited here — see
   ["MFA-required route enforcement"](#mfa-required-route-enforcement--inherited-ships-dark)
