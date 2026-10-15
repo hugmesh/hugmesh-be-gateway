@@ -476,11 +476,20 @@ a `DOMAIN_alpha` principal is hard-denied before URL grants are checked.
   `app.mfa.enforce-privileged-floor` from their dark defaults. No change to this
   repo is required — the effect is entirely in the `gateway_route_access` rows
   managed by admin-bff for `hugmesh-be-gateway`.
-- 🚧 **New backend API surfaces behind `Path=/**`.** Notifications external channels
-  (Matrix DM / Akkoma feed / phpBB / email adapters) and the Workload Console
-  (admin-bff changelog 110-band) add new API endpoints that the catch-all route
-  will front. No change to this repo; if a future README enumerates the backend API
-  surface, those endpoints must be marked roadmap rather than shipped.
+- 🚧 **New backend API surfaces behind `Path=/**`.** The endpoints themselves are
+  merged in `hugmesh-admin-bff-api` (not here); what is open is enabling and wiring
+  them. **Notification external channels:** the Matrix DM, Akkoma feed, phpBB forum
+  and email adapters (`notification/channel/{Matrix,Akkoma,Forum,Email}Channel.java`)
+  and the `notification/ExternalChannelReconciler.java` that fans out to them are on
+  admin-bff's `main`, each behind a `notify.<channel>.enabled` flag that defaults to
+  `false`. Still open: the real Matrix, Akkoma and phpBB transports, the user
+  preference consult on the external path, and turning the channels on in a
+  deployment (`hugmesh-admin-bff-api#4`, `#92`). **Workload Console:**
+  `workload/WorkloadAdminController.java` (`/bff/admin/workloads`) and the
+  `110-workload-console-grants.xml` changelog are merged and ship dark
+  (`WORKLOAD_CONSOLE_ENABLED` defaults to `false`). No change to this repo; if a
+  future README enumerates the backend API surface, mark the external channels and
+  the Workload Console as merged but disabled by default, not as enabled.
 - 🔭 **Auth-core relocation (upstream).** Login/session/account logic is being
   relocated from admin-bff to user-bff, with shared account/session/MFA/Casdoor-admin
   infra extracted to `hugmesh-auth-core` (consumed by user-bff + admin-bff only).
