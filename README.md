@@ -434,12 +434,15 @@ With these values, a JWT with `iss=https://id.alpha.example.com` yields
   3. A grep of every `hugmesh-*` repo's `origin/main` for
      `image:.*hugmesh-(be|fe|pki)-gateway` returns **nothing**. No repo
      references `ghcr.io/hugmesh/hugmesh-be-gateway` except this repo's workflow.
-  4. `hugmesh-generator` mentions the string `hugmesh-be-gateway`
-     only in non-deploy uses: the OWASP SCA scan matrix and the catalog clone list in
-     `.gitlab-ci.yml`, the catalog `adopters.yaml`, the `route-access` seed SQL
-     (that is `spring.application.name`, not an image), a dark KEDA ScaledObject,
-     and ArgoCD `releaseName`/`instance.name` values. The local compose stack
-     builds the base `hugmesh-gateway` repo, not this one.
+  4. `hugmesh-generator` mentions the string `hugmesh-be-gateway` in many
+     files, but as a repo name to clone or list, a service or host name, or a
+     `spring.application.name`, never as an image or a build context. Examples:
+     the catalog clone list and a per-repo job matrix in `.gitlab-ci.yml`,
+     the catalog `adopters.yaml`, the `route-access` seed SQL, a dark KEDA
+     ScaledObject, ArgoCD `releaseName`/`instance.name` values, and the e2e and
+     stack tests. The local compose stack's `hugmesh-be-gateway` service builds
+     from the base `hugmesh-gateway` source (`tests/stack/compose.local.yaml`),
+     not from this repo.
 
   `deploy/deployment.yaml` also runs the base image directly. So no deployment
   path uses this repo's `Dockerfile`, `application-be.yml` or Liquibase
@@ -494,11 +497,20 @@ With these values, a JWT with `iss=https://id.alpha.example.com` yields
   `app.mfa.enforce-privileged-floor` off their dark defaults. This repo needs no
   change. The effect is entirely in the `gateway_route_access` rows
   that admin-bff manages for `hugmesh-be-gateway`.
-- 🚧 **New backend API surfaces behind `Path=/**`.** External notification channels
-  (Matrix DM / Akkoma feed / phpBB / email adapters) and the Workload Console
-  (admin-bff changelog 110-band) add API endpoints that the catch-all route
-  will front. No change to this repo. If a future README lists the backend API
-  surface, mark these endpoints roadmap, not shipped.
+- 🚧 **New backend API surfaces behind `Path=/**`.** The endpoints themselves are
+  merged in `hugmesh-admin-bff-api` (not here); what is open is enabling and wiring
+  them. **Notification external channels:** the Matrix DM, Akkoma feed, phpBB forum
+  and email adapters (`notification/channel/{Matrix,Akkoma,Forum,Email}Channel.java`)
+  and the `notification/ExternalChannelReconciler.java` that fans out to them are on
+  admin-bff's `main`, each behind a `notify.<channel>.enabled` flag that defaults to
+  `false`. Still open: the real Matrix, Akkoma and phpBB transports, the user
+  preference consult on the external path, and turning the channels on in a
+  deployment (`hugmesh-admin-bff-api#4`, `#92`). **Workload Console:**
+  `workload/WorkloadAdminController.java` (`/bff/admin/workloads`) and the
+  `110-workload-console-grants.xml` changelog are merged and ship dark
+  (`WORKLOAD_CONSOLE_ENABLED` defaults to `false`). No change to this repo; if a
+  future README enumerates the backend API surface, mark the external channels and
+  the Workload Console as merged but disabled by default, not as enabled.
 - 🔭 **Auth-core relocation (upstream).** Login, session and account logic is moving
   from admin-bff to user-bff. Shared account, session, MFA and Casdoor-admin
   code is extracted to `hugmesh-auth-core` (used by user-bff and admin-bff only).
