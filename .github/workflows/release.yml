@@ -1,35 +1,162 @@
 name: Release
 
-# Manual-only. This workflow is intentionally inert until a human enables it —
-# no push/tag trigger. Mirrors the build this repo's .gitlab-ci.yml performs
-# (docker build off the sibling hugmesh-gateway image via the GATEWAY_IMAGE
-# build-arg), but publishes to GHCR instead of the in-cluster GitLab registry.
+# Builds the be-gateway overlay image and publishes it to GHCR
+# (ghcr.io/hugmesh/hugmesh-be-gateway). Mirrors the build this repo's
+# .gitlab-ci.yml performs (docker build off the sibling hugmesh-gateway image via
+# the GATEWAY_IMAGE build-arg), but publishes to GHCR instead of the in-cluster
+# GitLab registry.
+#
+# The version lives in the VERSION file. What a run publishes depends on the ref:
+#   push to main                    -> :main and :sha-<12 hex>
+#   push of the tag v<VERSION>      -> :<VERSION>, :beta (beta versions only), :sha-<12 hex>,
+#                                      and a GitHub pre-release for the tag
+#   workflow_dispatch on main       -> same as a push to main
+#   workflow_dispatch on a v* tag   -> same as the tag push (the re-run path)
+#   anything else                   -> refused by the version job
+# A published <VERSION> tag is never overwritten, and a beta never gets :latest.
+#
+# There is no pull_request trigger, and there must never be one: the publish jobs
+# may run on the org's self-hosted runner, and a self-hosted runner must never run
+# code from a pull request.
+
 on:
+  push:
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       gateway_image:
         description: >
-          Sibling hugmesh-gateway base image (GATEWAY_IMAGE build-arg) this
-          overlay builds FROM. hugmesh-gateway's release workflow publishes
-          :latest and :<short sha> (there is no :main tag).
+          Override the hugmesh-gateway base image (GATEWAY_IMAGE build-arg) for a
+          main build only. Leave empty to use the pinned base in
+          PINNED_GATEWAY_IMAGE. A tag (release) run refuses any other base.
         required: false
-        default: ghcr.io/hugmesh/hugmesh-gateway:latest
-      tag:
-        description: Tag to publish the built image under.
-        required: false
-        default: latest
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/hugmesh/hugmesh-be-gateway
+  # The hugmesh-gateway base image this overlay builds FROM. Always an exact
+  # published version: never :beta, :main or :latest. Raise it in the same PR
+  # that raises VERSION.
+  PINNED_GATEWAY_IMAGE: ghcr.io/hugmesh/hugmesh-gateway:0.3.0-beta.1
 
 jobs:
-  build-and-push:
-    # RUNS_ON is an org/repo variable holding a JSON array of runner labels;
-    # fall back to the GitHub-hosted runner when it is unset.
-    runs-on: ${{ fromJSON(vars.RUNS_ON || '["ubuntu-latest"]') }}
+  version:
+    # RUNS_ON_PUBLISH is a repo variable holding a JSON array of runner labels
+    # (for example ["self-hosted","Linux","X64"]). It is used only for main, v* tags
+    # and studio-v* tags, never for a pull request; when it is unset, or for any
+    # other ref, the job runs on the GitHub-hosted ubuntu-latest. Deleting the
+    # variable is the off switch for the self-hosted runner.
+    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/studio-v')) && vars.RUNS_ON_PUBLISH || '"ubuntu-latest"') }}
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      kind: ${{ steps.decide.outputs.kind }}
+      gateway_image: ${{ steps.decide.outputs.gateway_image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Every value from outside reaches the shell through env, never by expression
+      # interpolation inside run: (an expression there is pasted into the script text).
+      - name: Read VERSION and decide what this run publishes
+        id: decide
+        env:
+          INPUT_GATEWAY_IMAGE: ${{ inputs.gateway_image }}
+        run: |
+          set -euo pipefail
+
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request|pull_request_target)
+              echo "::error::this workflow never runs for a pull request"
+              exit 1
+              ;;
+          esac
+
+          if [ ! -f VERSION ]; then
+            echo "::error::VERSION file is missing"
+            exit 1
+          fi
+          if [ "$(wc -l < VERSION)" -ne 1 ]; then
+            echo "::error::VERSION must hold exactly one line, ending in a newline"
+            exit 1
+          fi
+          version="$(head -n 1 VERSION)"
+          semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$'
+          if ! [[ "${version}" =~ ${semver} ]]; then
+            echo "::error::VERSION '${version}' is not MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-<pre-release> (no '+build' part, no spaces)"
+            exit 1
+          fi
+          case "${version}" in
+            *SNAPSHOT*)
+              echo "::error::VERSION '${version}' is a SNAPSHOT; a published version is immutable"
+              exit 1
+              ;;
+          esac
+
+          case "${GITHUB_REF}" in
+            refs/tags/v*)
+              if [ "${GITHUB_REF#refs/tags/v}" != "${version}" ]; then
+                echo "::error::tag ${GITHUB_REF#refs/tags/} does not match VERSION ${version}; tag the commit whose VERSION file says ${version} as v${version}"
+                exit 1
+              fi
+              kind=release
+              ;;
+            refs/heads/main)
+              kind=main
+              ;;
+            *)
+              echo "::error::ref ${GITHUB_REF} publishes nothing; run this on main or on a v<VERSION> tag"
+              exit 1
+              ;;
+          esac
+
+          gateway_image="${PINNED_GATEWAY_IMAGE}"
+          if [ -n "${INPUT_GATEWAY_IMAGE}" ]; then
+            case "${INPUT_GATEWAY_IMAGE}" in
+              *[!A-Za-z0-9._/:@-]*|-*)
+                echo "::error::gateway_image '${INPUT_GATEWAY_IMAGE}' is not an image reference"
+                exit 1
+                ;;
+            esac
+            if [ "${kind}" = release ] && [ "${INPUT_GATEWAY_IMAGE}" != "${PINNED_GATEWAY_IMAGE}" ]; then
+              echo "::error::a release builds only on the pinned base ${PINNED_GATEWAY_IMAGE}; change PINNED_GATEWAY_IMAGE in a PR instead of overriding it"
+              exit 1
+            fi
+            gateway_image="${INPUT_GATEWAY_IMAGE}"
+          fi
+          if [ "${kind}" = release ]; then
+            # A release pins an exact base: a version tag or a digest, never a moving tag.
+            base_ref_re='(:[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?|@sha256:[0-9a-f]{64})$'
+            if ! [[ "${gateway_image}" =~ ${base_ref_re} ]]; then
+              echo "::error::a release needs an exact base image version or digest, not '${gateway_image}'"
+              exit 1
+            fi
+          fi
+
+          echo "version=${version} kind=${kind} gateway_image=${gateway_image}"
+          {
+            echo "version=${version}"
+            echo "kind=${kind}"
+            echo "gateway_image=${gateway_image}"
+          } >> "${GITHUB_OUTPUT}"
+
+  image:
+    needs: version
+    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/studio-v')) && vars.RUNS_ON_PUBLISH || '"ubuntu-latest"') }}
     permissions:
       contents: read
       packages: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      KIND: ${{ needs.version.outputs.kind }}
+      GATEWAY_IMAGE: ${{ needs.version.outputs.gateway_image }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,25 +172,98 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check the base image can be pulled
-        env:
-          GATEWAY_IMAGE: ${{ inputs.gateway_image }}
         run: |
           if [ -z "$GATEWAY_IMAGE" ]; then
-            echo "::error::gateway_image is empty; pass a hugmesh-gateway tag (latest or a short sha)"
+            echo "::error::gateway_image is empty; pass a hugmesh-gateway image reference"
             exit 1
           fi
           if ! docker manifest inspect "$GATEWAY_IMAGE" >/dev/null 2>&1; then
-            echo "::error::cannot pull base image $GATEWAY_IMAGE (missing tag or package access). Run the hugmesh-gateway Release workflow first, and grant this repository Read under that package's Manage Actions access."
+            echo "::error::cannot pull base image $GATEWAY_IMAGE (missing tag or package access). Publish that hugmesh-gateway version first (its Release workflow on its v* tag), and grant this repository Read under that package's Manage Actions access."
             exit 1
           fi
 
+      - name: Refuse to overwrite a published version
+        if: needs.version.outputs.kind == 'release'
+        run: |
+          if docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" >/dev/null 2>&1; then
+            echo "::error::${IMAGE_NAME}:${VERSION} is already published and is never overwritten. Raise VERSION (the beta number N for a beta) and tag again."
+            exit 1
+          fi
+
+      - name: Compute image tags and labels
+        id: meta
+        env:
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          sha12="${GITHUB_SHA::12}"
+          if [ "${KIND}" = release ]; then
+            tags="${IMAGE_NAME}:${VERSION}"
+            case "${VERSION}" in
+              *-beta.*) tags="${tags}"$'\n'"${IMAGE_NAME}:beta" ;;
+              *-*) ;;
+              *) tags="${tags}"$'\n'"${IMAGE_NAME}:latest" ;;
+            esac
+            image_version="${VERSION}"
+          else
+            tags="${IMAGE_NAME}:main"
+            image_version=main
+          fi
+          tags="${tags}"$'\n'"${IMAGE_NAME}:sha-${sha12}"
+          # The base image carries its own OCI labels; these override them so the
+          # package links to this repo and records which base it was built on.
+          labels="org.opencontainers.image.source=${SOURCE_URL}"
+          labels="${labels}"$'\n'"org.opencontainers.image.version=${image_version}"
+          labels="${labels}"$'\n'"org.opencontainers.image.revision=${GITHUB_SHA}"
+          labels="${labels}"$'\n'"org.opencontainers.image.base.name=${GATEWAY_IMAGE}"
+          echo "tags:"; echo "${tags}"
+          echo "labels:"; echo "${labels}"
+          {
+            echo "tags<<EOF_TAGS"
+            echo "${tags}"
+            echo "EOF_TAGS"
+            echo "labels<<EOF_LABELS"
+            echo "${labels}"
+            echo "EOF_LABELS"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Build and push
         uses: docker/build-push-action@v6
+        env:
+          # No build-record upload: it is a separate artifact upload that can fail
+          # the job after a successful push, and nothing here reads it.
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: .
           push: true
           build-args: |
-            GATEWAY_IMAGE=${{ inputs.gateway_image }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ inputs.tag }}
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            GATEWAY_IMAGE=${{ needs.version.outputs.gateway_image }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  github-release:
+    needs: [version, image]
+    if: needs.version.outputs.kind == 'release'
+    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/studio-v')) && vars.RUNS_ON_PUBLISH || '"ubuntu-latest"') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub release for the tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          GATEWAY_IMAGE: ${{ needs.version.outputs.gateway_image }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "release ${tag} already exists; nothing to do"
+            exit 0
+          fi
+          flags=()
+          case "${VERSION}" in
+            *-*) flags=(--prerelease --latest=false) ;;
+          esac
+          notes="Image: ${IMAGE_NAME}:${VERSION}"$'\n'"Built on: ${GATEWAY_IMAGE}"
+          gh release create "${tag}" --repo "${GITHUB_REPOSITORY}" --verify-tag \
+            --title "${tag}" --notes "${notes}" "${flags[@]}"

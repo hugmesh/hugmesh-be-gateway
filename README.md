@@ -116,11 +116,13 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   `edge-ai-analysis`, `edge-ai-tts` and `edge-ai` on `ai.hugmesh.net`. Still no
   bare `Path=/**`. Treat `deploy/` as directional, not current. See **Known Gaps**.
 - **CI:** GitLab (in-cluster) builds and pushes the overlay image
-  (`.gitlab-ci.yml`). GitHub Actions has one **manual-only** workflow,
-  `.github/workflows/release.yml` (`workflow_dispatch`, added 2026-10-07 in PR #4).
-  It builds the same image off `ghcr.io/hugmesh/hugmesh-gateway:latest` (input
-  `gateway_image`) and pushes `ghcr.io/hugmesh/hugmesh-be-gateway:<tag>` and
-  `:<commit sha>`. It has no push or tag trigger.
+  (`.gitlab-ci.yml`). GitHub Actions has one workflow,
+  `.github/workflows/release.yml`, which builds the same image off the pinned
+  base `ghcr.io/hugmesh/hugmesh-gateway:0.3.0-beta.1` (`PINNED_GATEWAY_IMAGE`)
+  and pushes it to `ghcr.io/hugmesh/hugmesh-be-gateway`. See **Versioning and
+  releases** below.
+- **Version:** `0.1.0-beta.1` (the `VERSION` file). `0.1` means an overlay with
+  no code or tests of its own; no version of this image has been published yet.
 
 ```mermaid
 flowchart TB
@@ -170,11 +172,50 @@ route-access rows. This repo is the backend instance.
 | `liquibase/changelog/db.changelog-master.xml` | Liquibase **master changelog**; it `<include>`s `001-gateway-routes.xml` (`relativeToChangelogFile="true"`). The `Dockerfile` copies it to `/app/liquibase/changelog`, but `hugmesh-gateway` has no Liquibase dependency (`pom.xml`) and nothing in it runs this changelog |
 | `liquibase/changelog/001-gateway-routes.xml` | inserts the `be-default` route (`Path=/**` → API) into a `gateway_routes` table. The base gateway reads no such table: its route registry is the Cassandra `url_registry` table (`UrlRegistryRouteDefinitionLocator`), and `SecurityConfig.java` says "nothing in this gateway loads that table" |
 | `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `hugmesh-gateway` image in the same in-cluster GitLab registry namespace |
-| `.github/workflows/release.yml` | manual-only (`workflow_dispatch`) GHCR release: the same build, pushed to `ghcr.io/hugmesh/hugmesh-be-gateway` |
+| `VERSION` | the image version (`0.1.0-beta.1`). A `v<VERSION>` git tag publishes it |
+| `.github/workflows/release.yml` | GHCR release: the same build, pushed to `ghcr.io/hugmesh/hugmesh-be-gateway` on a push to `main` (`:main`), on a `v<VERSION>` tag (`:<VERSION>`, `:beta`, plus a GitHub pre-release), or by a manual run on either ref |
 | `hugmesh-deploy.yaml` | per-repo deploy descriptor for the Phase-6 Forgejo **service-catalog** ApplicationSet (name/namespace/image/port). **Ships dark:** the live ArgoCD source today is the `hugmesh-gateway` Helm chart in `hugmesh-generator`, so this descriptor + `deploy/` change nothing running until the Forgejo cutover |
 | `deploy/` | the gateway Helm chart **rendered to static kustomize manifests** (`serviceaccount`/`configmap`/`service`/`deployment`/`ingress` + `kustomization.yaml`). A dark copy of the live render as of 2026-06-23, kept for the Forgejo-source cutover and now out of date (see **Known Gaps**). The current GitHub-rooted ArgoCD does not read it |
 
-CI is **GitLab** (in-cluster). The one GitHub Actions workflow is the manual GHCR release above.
+CI is **GitLab** (in-cluster). The one GitHub Actions workflow is the GHCR release above.
+
+### Versioning and releases
+
+The version lives in `VERSION` and follows `MAJOR.MINOR.PATCH-beta.N`
+(today `0.1.0-beta.1`). `.github/workflows/release.yml` decides what to publish
+from the ref it runs on:
+
+| Ref | Image tags pushed | GitHub release |
+|-----|-------------------|----------------|
+| push to `main`, or a manual run on `main` | `:main`, `:sha-<12 hex>` | none |
+| tag `v<VERSION>`, or a manual run on that tag | `:<VERSION>`, `:beta` (beta versions only), `:sha-<12 hex>` | pre-release, never marked latest |
+| any other ref | nothing: the version job refuses it | none |
+
+- The build is `FROM` the exact base in `PINNED_GATEWAY_IMAGE`
+  (`ghcr.io/hugmesh/hugmesh-gateway:0.3.0-beta.1`), never `:beta` or `:latest`.
+  A release run refuses any other base. That base must be published first, from
+  the `hugmesh-gateway` repo's own `v0.3.0-beta.1` tag.
+- A tag must equal `v` plus the `VERSION` file, `-SNAPSHOT` is refused, and an
+  already published `:<VERSION>` is never overwritten: raise the beta number and
+  tag again.
+- A beta never gets `:latest`.
+- Each image carries `org.opencontainers.image.source`, `.version`, `.revision`
+  and `.base.name` labels.
+- The jobs run on the runners named by the repo variable `RUNS_ON_PUBLISH` (a JSON
+  array, for example `["self-hosted","Linux","X64"]`) only for `main` and `v*`
+  tags. When the variable is unset they run on GitHub-hosted `ubuntu-latest`.
+  The workflow has no pull-request trigger.
+
+To cut a release: raise `VERSION` (and `PINNED_GATEWAY_IMAGE` if the base moved)
+in a PR, merge it, then tag the merge commit on `main`:
+
+```bash
+git tag -a v0.1.0-beta.1 -m "hugmesh-be-gateway 0.1.0-beta.1" <commit on main>
+git push origin v0.1.0-beta.1
+```
+
+To re-run a release for an existing tag:
+`gh workflow run release.yml --repo hugmesh/hugmesh-be-gateway --ref v0.1.0-beta.1`.
 
 ---
 
@@ -419,7 +460,7 @@ With these values, a JWT with `iss=https://id.alpha.example.com` yields
   re-check `deploy/` against the live render. Its last
   confirmation was 2026-06-23.
 - **This repo's overlay image is not consumed anywhere** (re-confirmed 2026-10-07).
-  `.gitlab-ci.yml` builds and pushes this overlay image, and the manual GitHub
+  `.gitlab-ci.yml` builds and pushes this overlay image, and the GitHub release
   workflow can push it to GHCR, but **nothing deploys it**. Four independent
   checks against `hugmesh-generator`'s `origin/main`:
   1. All four gateway ArgoCD Applications (`specs/cluster/apps/20-gateway-{be,
