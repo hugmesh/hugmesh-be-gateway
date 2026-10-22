@@ -521,3 +521,8 @@ With these values, a JWT with `iss=https://id.alpha.example.com` yields
   images and binaries is being added in the generator and base build pipeline, not
   here. This overlay gets the hardened base image on its next build, because
   `GATEWAY_IMAGE` is pinned by tag.
+
+## Security and license
+
+Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
+This repository is released under the MIT License; see [LICENSE](LICENSE).
