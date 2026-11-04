@@ -173,7 +173,8 @@ route-access rows. This repo is the backend instance.
 | `liquibase/changelog/001-gateway-routes.xml` | inserts the `be-default` route (`Path=/**` → API) into a `gateway_routes` table. The base gateway reads no such table: its route registry is the Cassandra `url_registry` table (`UrlRegistryRouteDefinitionLocator`), and `SecurityConfig.java` says "nothing in this gateway loads that table" |
 | `.gitlab-ci.yml` | builds + pushes this overlay image, basing the build off the sibling `hugmesh-gateway` image in the same in-cluster GitLab registry namespace |
 | `VERSION` | the image version (`0.1.0-beta.1`). A `v<VERSION>` git tag publishes it |
-| `.github/workflows/release.yml` | GHCR release: the same build, pushed to `ghcr.io/hugmesh/hugmesh-be-gateway` on a push to `main` (`:main`), on a `v<VERSION>` tag (`:<VERSION>`, `:beta`, plus a GitHub pre-release), or by a manual run on either ref |
+| `.github/workflows/release.yml` | GHCR release: the same build, pushed to `ghcr.io/hugmesh/hugmesh-be-gateway` on a push to `main` (`:main`) or `release/X.Y` (`:sha-<12>` only), on a beta tag `vX.Y.Z-beta.N` (`:<VERSION>`, `:beta`, plus a GitHub pre-release) or a stable tag `vX.Y.Z` (`:<VERSION>`, `:X.Y`, `:latest` for the newest stable line), or by a manual run on any of those refs |
+| `scripts/release-channel.sh` | decides, from the ref, the channel and the image tags a release run may publish; `scripts/test-release-channel.sh` tests it and the workflow steps that use it, and the version job runs that test first |
 | `hugmesh-deploy.yaml` | per-repo deploy descriptor for the Phase-6 Forgejo **service-catalog** ApplicationSet (name/namespace/image/port). **Ships dark:** the live ArgoCD source today is the `hugmesh-gateway` Helm chart in `hugmesh-generator`, so this descriptor + `deploy/` change nothing running until the Forgejo cutover |
 | `deploy/` | the gateway Helm chart **rendered to static kustomize manifests** (`serviceaccount`/`configmap`/`service`/`deployment`/`ingress` + `kustomization.yaml`). A dark copy of the live render as of 2026-06-23, kept for the Forgejo-source cutover and now out of date (see **Known Gaps**). The current GitHub-rooted ArgoCD does not read it |
 
@@ -181,33 +182,42 @@ CI is **GitLab** (in-cluster). The one GitHub Actions workflow is the GHCR relea
 
 ### Versioning and releases
 
-The version lives in `VERSION` and follows `MAJOR.MINOR.PATCH-beta.N`
-(today `0.1.0-beta.1`). `.github/workflows/release.yml` decides what to publish
+The version lives in `VERSION`: `MAJOR.MINOR.PATCH-beta.N` on `main` (today
+`0.1.0-beta.1`) and `MAJOR.MINOR.PATCH` on a `release/X.Y` branch. The tag
+decides the channel. `scripts/release-channel.sh` decides what a run publishes
 from the ref it runs on:
 
 | Ref | Image tags pushed | GitHub release |
 |-----|-------------------|----------------|
 | push to `main`, or a manual run on `main` | `:main`, `:sha-<12 hex>` | none |
-| tag `v<VERSION>`, or a manual run on that tag | `:<VERSION>`, `:beta` (beta versions only), `:sha-<12 hex>` | pre-release, never marked latest |
-| any other ref | nothing: the version job refuses it | none |
+| push to `release/X.Y` (VERSION must be `X.Y.*`) | `:sha-<12 hex>` | none |
+| beta tag `vX.Y.Z-beta.N` (commit on `main`) | `:<VERSION>`, `:beta`, `:sha-<12 hex>` | pre-release, never marked latest |
+| stable tag `vX.Y.Z` (commit on `release/X.Y`) | `:<VERSION>`, `:sha-<12 hex>`, plus `:X.Y` when no newer `X.Y.*` is published and `:latest` when no newer stable on any line is published | release, marked latest only together with `:latest` |
+| any other ref (including `release/<not X.Y>` and `-rc.N` tags) | nothing: the version job refuses it | none |
 
 - The build is `FROM` the exact base in `PINNED_GATEWAY_IMAGE`
   (`ghcr.io/hugmesh/hugmesh-gateway:0.3.0-beta.1`), never `:beta` or `:latest`.
   A release run refuses any other base. That base must be published first, from
   the `hugmesh-gateway` repo's own `v0.3.0-beta.1` tag.
 - A tag must equal `v` plus the `VERSION` file, `-SNAPSHOT` is refused, and an
-  already published `:<VERSION>` is never overwritten: raise the beta number and
-  tag again.
-- A beta never gets `:latest`.
+  already published `:<VERSION>` is never overwritten: raise the beta number (a
+  beta) or cut the next patch from `release/X.Y` (a stable) and tag again. The
+  floating `:beta`, `:X.Y` and `:latest` move. A patch on an older stable line
+  moves its `:X.Y` but never `:latest`.
+- Whether `:X.Y` and `:latest` move is decided again right before the push and
+  right before `gh release create`, and every pushed tag is checked against the
+  signed digest.
 - Each image carries `org.opencontainers.image.source`, `.version`, `.revision`
   and `.base.name` labels.
 - The jobs run on the runners named by the repo variable `RUNS_ON_PUBLISH` (a JSON
   array, for example `["self-hosted","Linux","X64"]`) only for `main` and `v*`
-  tags. When the variable is unset they run on GitHub-hosted `ubuntu-latest`.
+  tags. When the variable is unset, and always for `release/X.Y`, they run on
+  GitHub-hosted `ubuntu-latest`.
   The workflow has no pull-request trigger.
 
-To cut a release: raise `VERSION` (and `PINNED_GATEWAY_IMAGE` if the base moved)
-in a PR, merge it, then tag the merge commit on `main`:
+To cut a beta: raise `VERSION` (and `PINNED_GATEWAY_IMAGE` if the base moved)
+in a PR, merge it, then tag the merge commit on `main`. A stable `vX.Y.Z` is
+tagged the same way on a commit of `release/X.Y`:
 
 ```bash
 git tag -a v0.1.0-beta.1 -m "hugmesh-be-gateway 0.1.0-beta.1" <commit on main>
