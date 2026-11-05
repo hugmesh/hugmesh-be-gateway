@@ -101,6 +101,12 @@ jobs:
       - name: Self-test the release channel rules
         run: bash scripts/test-release-channel.sh
 
+      # deploy/configmap.yaml: a route that relays a Host to another gateway must
+      # carry PreserveHostHeader (hugmesh-generator#622). Needs python3 + PyYAML;
+      # a missing PyYAML fails this step, it does not skip it.
+      - name: Check gateway relay routes preserve the Host header
+        run: bash scripts/test-route-relay-host.sh
+
       # Every value from outside reaches the shell through env, never by expression
       # interpolation inside run: (an expression there is pasted into the script text).
       - name: Read VERSION and decide what this run publishes
