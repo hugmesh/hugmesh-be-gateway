@@ -2,11 +2,14 @@
 # (templates/configmap.yaml) with the be-gateway routes from apps/20-gateway-be.yaml.
 # The gateway loads this application-routes.yml via SPRING_CONFIG_ADDITIONAL_LOCATION
 # (file:/config/). The Deployment mounts THIS ConfigMap (by fixed name) at /config.
-# Kept verbatim — Forgejo-cutover dark copy; see ../hugmesh-deploy.yaml.
+# Kept verbatim — Forgejo-cutover dark copy; see ../hugmesh-deploy.yaml —
+# except for one change: headscale-forward carries the PreserveHostHeader filter
+# (hugmesh-generator#622, matching the chart since hugmesh-generator PR #725).
 #
 # TODO: this route table (no bare Path=/** entry) diverges from this repo's own
 # application-be.yml (a single Path=/** catch-all). Verified byte-identical to
-# the live render on 2026-06-23 only -- re-sync against the source Helm chart
+# the live render on 2026-06-23 only (apart from the headscale-forward filter
+# added later, see above) -- re-sync against the source Helm chart
 # before the Forgejo cutover relies on it. See README's Known Gaps section.
 apiVersion: v1
 kind: ConfigMap
@@ -36,6 +39,13 @@ data:
                   uri: http://hugmesh-pki-gateway.hugmesh-pki.svc.cluster.local:8080
                   predicates:
                     - Host=scale.hugmesh.net
+                  # Relay with the ORIGINAL Host. Without this filter the gateway
+                  # sends the upstream URI's host (the pki gateway Service DNS
+                  # name), so the pki gateway's own Host=scale.<domain> route and
+                  # its headscale host gate never match relayed traffic.
+                  # Checked by scripts/test-route-relay-host.sh.
+                  filters:
+                    - PreserveHostHeader
                 - id: mastodon-oauth
                   uri: https://akkoma-proxy.hugmesh-backend.svc.cluster.local:4443
                   predicates:

@@ -115,6 +115,10 @@ docker build --build-arg GATEWAY_IMAGE=hugmesh-systems/hugmesh-gateway:dev \
   `origin/main`, 2026-10-07) carry **14** routes: the same 11 plus
   `edge-ai-analysis`, `edge-ai-tts` and `edge-ai` on `ai.hugmesh.net`. Still no
   bare `Path=/**`. Treat `deploy/` as directional, not current. See **Known Gaps**.
+  One change since the snapshot: `headscale-forward` now carries the
+  `PreserveHostHeader` filter the chart gained in hugmesh-generator PR #725
+  (hugmesh-generator#622). `scripts/test-route-relay-host.sh` fails if any
+  host-predicated route that relays to another gateway loses that filter.
 - **CI:** GitLab (in-cluster) builds and pushes the overlay image
   (`.gitlab-ci.yml`). GitHub Actions has one workflow,
   `.github/workflows/release.yml`, which builds the same image off the pinned
