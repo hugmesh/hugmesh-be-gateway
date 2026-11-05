@@ -75,7 +75,7 @@ env:
   # The hugmesh-gateway base image this overlay builds FROM. Always an exact
   # published version: never :beta, :main or :latest. Raise it in the same PR
   # that raises VERSION.
-  PINNED_GATEWAY_IMAGE: ghcr.io/hugmesh/hugmesh-gateway:0.3.0-beta.1
+  PINNED_GATEWAY_IMAGE: ghcr.io/hugmesh/hugmesh-gateway:0.4.0-beta.1
 
 jobs:
   version:
